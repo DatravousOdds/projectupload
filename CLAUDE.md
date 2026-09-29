@@ -16,7 +16,7 @@ Project Photos: an open (no login) web app for creating projects and uploading, 
    - **Make it work:** plain, functional UI with basic Tailwind layout (spacing, readable text, usable on mobile). No custom visual design, animations, or color schemes yet.
    - **Test it:** confirm the slice's acceptance criteria in the browser and with tests.
    - **Then improve:** design polish and refinements come in later iterations, only when I ask.
-4. **Verify before saying done:** run `npm run typecheck`, `npm run lint`, and `npm test`. All must pass. Say which checks you ran.
+4. **Verify before saying done:** run `npm run typecheck`, `npm run lint`, and `npx vitest run`. All must pass. Say which checks you ran.
 5. **Don't commit or push** unless asked.
 6. If you're stuck after two attempts at the same problem, stop and explain what you tried.
 
@@ -36,9 +36,9 @@ Keep it concise: no restating the code, no long paragraphs. Skip explanations fo
 ```
 npm run dev         # Vite dev server at http://localhost:5173
 npm run build       # production build to dist/
-npm run typecheck   # tsc --noEmit
+npm run typecheck   # tsc -b (checks app + node configs; plain tsc --noEmit checks nothing here)
 npm run lint        # ESLint
-npm test            # Vitest
+npm test            # Vitest in watch mode; `npx vitest run` for a single pass
 npx supabase gen types typescript --project-id <id> > src/types/database.ts
 ```
 
