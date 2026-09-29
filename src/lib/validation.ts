@@ -4,7 +4,7 @@ import type { TablesInsert } from '../types/database'
 export const MAX_PROJECT_NAME_LENGTH = 100
 export const MAX_PROJECT_DESCRIPTION_LENGTH = 1000
 
-type ProjectInput = Pick<TablesInsert<'projects'>, 'name' | 'description'>
+export type ProjectInput = Pick<TablesInsert<'projects'>, 'name' | 'description'>
 
 export type ProjectFormValues = { name: string; description: string }
 
