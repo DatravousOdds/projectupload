@@ -271,6 +271,7 @@ src/
   lib/
     supabase.ts            # client singleton, env check
     images.ts              # validation, dimensions, thumbnails (pure functions)
+    validation.ts          # input validation: project form, files, route ids (pure functions)
   api/
     projects.ts            # query/mutation functions
     photos.ts              # upload, replace (upsert), soft delete, undo, list, versioned URLs

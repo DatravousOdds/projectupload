@@ -24,7 +24,7 @@ export function validateProjectInput(values: ProjectFormValues): ProjectInputRes
   const description = values.description.trim()
   const errors: ProjectInputErrors = {}
 
-  if (name === '') {
+  if (name === '') { 
     errors.name = 'Name is required.'
   } else if (characterCount(name) > MAX_PROJECT_NAME_LENGTH) {
     errors.name = `Name must be ${MAX_PROJECT_NAME_LENGTH} characters or fewer.`
