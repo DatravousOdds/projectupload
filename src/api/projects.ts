@@ -20,7 +20,7 @@ export async function listProjects(): Promise<ProjectWithPhotoCount[]> {
   const { data, error } = await supabase
     .from('projects')
     .select('*, photos(count)')
-    .is('photos.deleted_at', null)
+    .is('photos.deleted_at',null)
     .order('updated_at', { ascending: false })
 
   if (error) throw error
