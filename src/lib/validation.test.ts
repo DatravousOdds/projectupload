@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import {
+  MAX_PHOTO_SIZE_BYTES,
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
+  getPhotoFileError,
   validateProjectInput,
 } from './validation'
 
@@ -73,5 +75,52 @@ describe('validateProjectInput', () => {
         description: 'Description must be 1000 characters or fewer.',
       },
     })
+  })
+})
+
+describe('getPhotoFileError', () => {
+  // Only size and type matter to validation, so fake the size instead of allocating megabytes.
+  function makeFile(name: string, type: string, sizeBytes = 1024): File {
+    const file = new File(['x'], name, { type })
+    Object.defineProperty(file, 'size', { value: sizeBytes })
+    return file
+  }
+
+  test.each(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic'])('accepts %s', (type) => {
+    expect(getPhotoFileError(makeFile('photo', type))).toBeNull()
+  })
+
+  test('rejects a file that is not a supported image', () => {
+    expect(getPhotoFileError(makeFile('notes.pdf', 'application/pdf'))).toBe(
+      '"notes.pdf" isn\'t a supported image. Use JPEG, PNG, WebP, GIF or HEIC.',
+    )
+  })
+
+  test('rejects an image type the bucket does not allow', () => {
+    expect(getPhotoFileError(makeFile('icon.svg', 'image/svg+xml'))).toBe(
+      '"icon.svg" isn\'t a supported image. Use JPEG, PNG, WebP, GIF or HEIC.',
+    )
+  })
+
+  test('rejects a file the browser could not identify', () => {
+    expect(getPhotoFileError(makeFile('mystery', ''))).toBe(
+      '"mystery" isn\'t a supported image. Use JPEG, PNG, WebP, GIF or HEIC.',
+    )
+  })
+
+  test('accepts a file exactly at the size limit', () => {
+    expect(getPhotoFileError(makeFile('big.jpg', 'image/jpeg', MAX_PHOTO_SIZE_BYTES))).toBeNull()
+  })
+
+  test('rejects a file over the size limit', () => {
+    expect(getPhotoFileError(makeFile('huge.jpg', 'image/jpeg', MAX_PHOTO_SIZE_BYTES + 1))).toBe(
+      '"huge.jpg" is larger than 15 MB.',
+    )
+  })
+
+  test('reports the type problem first when both checks fail', () => {
+    expect(getPhotoFileError(makeFile('huge.pdf', 'application/pdf', MAX_PHOTO_SIZE_BYTES + 1))).toBe(
+      '"huge.pdf" isn\'t a supported image. Use JPEG, PNG, WebP, GIF or HEIC.',
+    )
   })
 })

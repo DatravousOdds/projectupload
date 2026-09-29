@@ -108,7 +108,7 @@ Validate every input before using it:
 - **Profile before optimizing.** Measure with browser DevTools first; don't add complexity for a problem you haven't seen.
 - Avoid unnecessary loops: don't loop over the same data twice when once works, and never query Supabase inside a loop when one query can fetch everything.
 - **Process uploads in small batches** (max 3 files at a time), not all at once, so large selections don't exhaust memory.
-- **Compress thumbnails** (WebP, ~400px). Grids always show thumbnails, never originals. Originals are uploaded as-is per SPEC.md.
+- **Compress thumbnails** (WebP, ~400px). Grids always show thumbnails, never originals. Originals are compressed before upload (WebP, 2560px long edge) per SPEC.md → Photo flows → Upload.
 - **Release memory:** call `bitmap.close()` after using an `ImageBitmap`, and `URL.revokeObjectURL()` for every object URL once it's no longer shown.
 - Use `loading="lazy"` on grid images.
 

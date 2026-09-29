@@ -40,3 +40,21 @@ export function validateProjectInput(values: ProjectFormValues): ProjectInputRes
 
   return { isValid: true, project: { name, description: description || null } }
 }
+
+// Match the photos Storage bucket's limits, so files are rejected before any processing or upload.
+export const MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024
+
+export const ALLOWED_PHOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic']
+
+// Returns a message to show the user, or null when the file can be uploaded.
+export function getPhotoFileError(file: File): string | null {
+  if (!ALLOWED_PHOTO_MIME_TYPES.includes(file.type)) {
+    return `"${file.name}" isn't a supported image. Use JPEG, PNG, WebP, GIF or HEIC.`
+  }
+
+  if (file.size > MAX_PHOTO_SIZE_BYTES) {
+    return `"${file.name}" is larger than 15 MB.`
+  }
+
+  return null
+}

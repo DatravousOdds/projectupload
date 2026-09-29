@@ -144,8 +144,15 @@ Generate with `supabase gen types typescript` into `src/types/database.ts`. Don'
 
 ### ProjectFormModal
 - Name (required), description (optional).
+- **Photos (optional):** an "Add photos" button (`accept="image/*"`, `multiple`) that can be used more than once; each pick appends to a small thumbnail grid inside the form.
+  - Each file is validated when picked (same rules as upload); invalid files show an error and are not added.
+  - Each thumbnail has **Remove** and **Replace**. Nothing is saved yet, so neither asks for confirmation; they only change the local list.
+  - Previews use object URLs, revoked when a photo is removed or replaced and when the form closes.
 - Inline validation; Save disabled while submitting.
-- On success, invalidate the projects query and navigate to `/projects/:id`.
+- **Save:** create the project, then upload the picked photos into it (see Photo flows → Upload). Nothing reaches Supabase until Save, so closing the form without saving leaves nothing behind.
+- While uploading, each photo shows its progress; the form can't be closed.
+- If every photo uploads (or none were picked): close the form and stay on the project list, which refreshes to show the new project.
+- If some photos fail: the project and the successful photos are kept. The form stays open with the fields locked, marks the failed photos with an error and a **Retry**, and offers **Close** to return to the list with what uploaded.
 
 ### ProjectDetailPage
 - Header: name, description, created date, photo count.
@@ -173,6 +180,9 @@ Used before both destructive actions. Cancel has default focus; Esc or clicking 
 1. Validate each file: image MIME type, ≤ 15 MB (matches bucket limit).
 
 2. Compress before upload: decode with `createImageBitmap` (applies EXIF orientation), resize so the long edge is at most 2560px (never upscale), and re-encode to WebP at ~0.82 quality with canvas. If the result isn't smaller than the original, upload the original instead. Re-encoding also strips EXIF metadata (including GPS location).
+   - **GIFs** are uploaded as-is (re-encoding would keep only the first frame); they still get a WebP thumbnail.
+   - **Files the browser can't decode** (e.g. HEIC outside Safari) are uploaded as-is for both the original and thumbnail paths, with `width`/`height` null. Where an image can't be displayed, the grid and viewer show a "Preview not available in this browser" placeholder instead of a broken image.
+   - Record the MIME type the browser actually produced; browsers that can't encode WebP return PNG.
 
 3. Read the final dimensions and generate a ~400px WebP thumbnail from the same decoded bitmap.
 
@@ -181,9 +191,8 @@ Used before both destructive actions. Cancel has default focus; Esc or clicking 
 5. Insert the `photos` row with that id (the trigger updates the project's `updated_at`).
 
 6. Invalidate the photos and projects queries so the grid and list refresh.
-queries so the grid and list refresh.
 
-If step 4 fails, log the orphaned paths to the console; they can be cleaned up in the Supabase dashboard.
+If the thumbnail upload or the row insert fails after a file was uploaded, log the orphaned paths to the console; they can be cleaned up in the Supabase dashboard.
 
 ### Replace
 1. User clicks Replace (grid menu or viewer) → file picker opens (single file, `accept="image/*"`).
@@ -205,10 +214,15 @@ If step 5 fails after step 4 succeeded, the new image is stored but the details 
 
 To restore a deleted photo later, set `deleted_at` to null on its row in the Supabase dashboard.
 
-Hooks: `useUploadPhotos(projectId)`, `useReplacePhoto()`, `useDeletePhoto()`, `useUndoDelete()`.
+Hooks: `useUploadPhotos()` (project id passed per call, since the form has none until Save), `useReplacePhoto()`, `useDeletePhoto()`, `useUndoDelete()`.
 
 ## Acceptance criteria
 - [ ] A created project appears in the list and persists after refresh and on another device.
+- [ ] Photos can be added while creating a project, one or several at a time and in more than one pick; each appears in the form's grid before saving.
+- [ ] In the form, a picked photo can be removed or replaced before saving, without a confirmation.
+- [ ] Closing the form without saving creates no project and uploads no files.
+- [ ] Saving creates the project, uploads its picked photos, closes the form, and shows the new project in the list with its photo count.
+- [ ] If some photos fail to upload on save, the form shows which ones, lets each be retried, and can still be closed.
 - [ ] Uploaded photos appear only in their project and persist after refresh.
 - [ ] Refreshing on `/projects/:id` on the deployed site reloads that project (no 404).
 - [ ] Multiple files upload at once with visible progress.
@@ -287,6 +301,7 @@ src/
     ProjectCard.tsx
     ProjectFormModal.tsx
     PhotoGrid.tsx
+    PhotoPickerGrid.tsx      # previews and upload status inside ProjectFormModal
     PhotoActionsMenu.tsx
     PhotoViewer.tsx
     UploadButton.tsx
@@ -313,13 +328,14 @@ SPEC.md
 1. `npm create vite@latest` (react-ts) + Tailwind + React Router; deploy "hello world" to Render with the rewrite rule to prove the pipeline.
 2. Supabase project, migrations for tables, triggers, RLS, grants, and bucket; generate types.
 3. TanStack Query setup; create and list projects.
-4. `ProjectDetailPage`.
-5. `useUploadPhotos` with thumbnails and progress.
-6. `PhotoGrid` and `PhotoViewer` (with versioned URLs from the start).
-7. Delete: `ConfirmDialog`, soft delete, optimistic update, undo toast.
-8. Replace: file picker, confirm, upsert to same paths, row update, verify the new image shows without a hard refresh.
-9. Edge cases: validation, not-found, error states, confirm the blocked operations in the acceptance criteria.
-10. Polish: responsive pass, touch-friendly actions, keyboard navigation, loading skeletons.
+4. Photo upload pipeline: `photos` and Storage migrations, file validation, compression and thumbnails (`lib/images.ts`), `api/photos.ts` upload, `useUploadPhotos` with progress.
+5. Photos in `ProjectFormModal`: pick, preview grid, remove/replace locally, upload on save, per-photo retry.
+6. `ProjectDetailPage`, including its own upload button (reusing step 4).
+7. `PhotoGrid` and `PhotoViewer` (with versioned URLs from the start).
+8. Delete: `ConfirmDialog`, soft delete, optimistic update, undo toast.
+9. Replace: file picker, confirm, upsert to same paths, row update, verify the new image shows without a hard refresh.
+10. Edge cases: validation, not-found, error states, confirm the blocked operations in the acceptance criteria.
+11. Polish: responsive pass, touch-friendly actions, keyboard navigation, loading skeletons.
 
 ## Open questions
 1. Is 15 MB the right max file size for your photos?

@@ -99,7 +99,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_valid_photo_object_name: {
+        Args: { object_name: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
