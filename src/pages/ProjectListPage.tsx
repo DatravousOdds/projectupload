@@ -1,14 +1,23 @@
-import type { ReactNode } from 'react'
-import { ProjectCard } from '../components/ProjectCard'
-import { useProjects } from '../hooks/useProjects'
+import type { ReactNode } from 'react';
+import { ProjectCard } from '../components/ProjectCard';
+import { ProjectFormModal } from '../components/ProjectFormModal';
+import { useProjects } from '../hooks/useProjects';
+import { useState } from 'react';
+
 
 // Shared by the loading placeholders and the real list so nothing shifts when data arrives.
-const PROJECT_GRID_CLASSES = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'
+const PROJECT_GRID_CLASSES = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3';
+const PLACEHOLDER_CARD_COUNT = 6;
 
-const PLACEHOLDER_CARD_COUNT = 3
+
 
 export function ProjectListPage() {
-  const { data: projects, isPending, isError, error, refetch } = useProjects()
+  const [isFormOpen, setFormOpen] = useState(false);
+  const { data: projects, isPending, isError, error, refetch } = useProjects();
+
+  function handleClick() {
+    setFormOpen(true);
+  }
 
   let content: ReactNode
 
@@ -66,8 +75,8 @@ export function ProjectListPage() {
     <div className="mx-auto max-w-5xl px-4 py-6">
       <header className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Projects</h1>
-        {/* Opens ProjectFormModal in the next step. */}
         <button
+          onClick={handleClick}
           type="button"
           className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
         >
@@ -80,6 +89,8 @@ export function ProjectListPage() {
       <footer className="mt-10 text-sm text-gray-600">
         <p>Projects and photos here are public.</p>
       </footer>
+
+      {isFormOpen && <ProjectFormModal onClose={() => setFormOpen(false)} />}
     </div>
   )
 }
