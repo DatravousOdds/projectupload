@@ -1,6 +1,7 @@
 function AppHeader() {
     return (
         <>
+        <h1 className="">Projects</h1>
         </>
     )
 };
