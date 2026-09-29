@@ -1,11 +1,10 @@
-function App() {
-  
+import type { RouteObject } from 'react-router'
+import { NotFoundPage } from './pages/NotFoundPage'
+import { ProjectDetailPage } from './pages/ProjectDetailPage'
+import { ProjectListPage } from './pages/ProjectListPage'
 
-  return (
-    <>
-      <h1 className="text-3xl">Hello World</h1>
-    </>
-  )
-}
-
-export default App
+export const routes: RouteObject[] = [
+  { path: '/', element: <ProjectListPage /> },
+  { path: '/projects/:id', element: <ProjectDetailPage /> },
+  { path: '*', element: <NotFoundPage /> },
+]
