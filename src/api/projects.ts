@@ -26,16 +26,29 @@ function withPhotoCount({ photos, ...project }: ProjectRowWithPhotos): ProjectWi
   return { ...project, photoCount: photos[0]?.count ?? 0 }
 }
 
-export async function listProjects(): Promise<ProjectWithPhotoCount[]> {
+export type CoverPhoto = Pick<Tables<'photos'>, 'storage_path' | 'thumb_path' | 'updated_at'>
+
+export type ProjectListItem = ProjectWithPhotoCount & { coverPhoto: CoverPhoto | null }
+
+// Also embeds the project's newest visible photo as `cover`, so the list needs one request.
+const PROJECT_LIST_ITEM = `${PROJECT_WITH_PHOTO_COUNT}, cover:photos(storage_path, thumb_path, updated_at)`
+
+export async function listProjects(): Promise<ProjectListItem[]> {
   const { data, error } = await supabase
     .from('projects')
-    .select(PROJECT_WITH_PHOTO_COUNT)
+    .select(PROJECT_LIST_ITEM)
     .is('photos.deleted_at', null)
+    .is('cover.deleted_at', null)
+    .order('created_at', { referencedTable: 'cover', ascending: false })
+    .limit(1, { referencedTable: 'cover' })
     .order('updated_at', { ascending: false })
 
   if (error) throw error
 
-  return data.map(withPhotoCount)
+  return data.map(({ cover, ...project }) => ({
+    ...withPhotoCount(project),
+    coverPhoto: cover[0] ?? null,
+  }))
 }
 
 // Returns null when no project has this id, so the page can show not-found instead of an error.

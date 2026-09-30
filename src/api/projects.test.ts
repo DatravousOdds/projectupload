@@ -57,52 +57,74 @@ describe('createProject', () => {
 })
 
 describe('listProjects', () => {
-  // Fake the chain: from('projects').select(...).is(...).order(...)
-  const order = vi.fn()
-  const is = vi.fn(() => ({ order }))
-  const select = vi.fn(() => ({ is }))
+  // A chainable fake: every query method returns the same object, and awaiting it gives `result`.
+  type FakeQuery = Record<'select' | 'is' | 'order' | 'limit', ReturnType<typeof vi.fn>> & {
+    then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise<unknown>
+  }
+
+  let query: FakeQuery
+  let result: { data: unknown; error: unknown }
+
+  const coverPhoto = {
+    storage_path: `${projectRow.id}/photo-9`,
+    thumb_path: `${projectRow.id}/photo-9_thumb`,
+    updated_at: '2026-09-29T13:00:00+00:00',
+  }
 
   beforeEach(() => {
-    vi.mocked(supabase.from).mockReturnValue({ select } as unknown as FromResult)
+    result = { data: [], error: null }
+    const chain = () => query
+    query = {
+      select: vi.fn(chain),
+      is: vi.fn(chain),
+      order: vi.fn(chain),
+      limit: vi.fn(chain),
+      then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+    }
+    vi.mocked(supabase.from).mockReturnValue(query as unknown as FromResult)
   })
 
-  test('returns each project with its photo count, in the order Supabase sends them', async () => {
-    order.mockResolvedValue({
+  test('returns each project with its photo count and cover, in the order Supabase sends them', async () => {
+    result = {
       data: [
-        { ...projectRow, photos: [{ count: 3 }] },
-        { ...olderProjectRow, photos: [{ count: 0 }] },
+        { ...projectRow, photos: [{ count: 3 }], cover: [coverPhoto] },
+        { ...olderProjectRow, photos: [{ count: 0 }], cover: [] },
       ],
       error: null,
-    })
+    }
 
     const projects = await listProjects()
 
     expect(projects).toEqual([
-      { ...projectRow, photoCount: 3 },
-      { ...olderProjectRow, photoCount: 0 },
+      { ...projectRow, photoCount: 3, coverPhoto },
+      { ...olderProjectRow, photoCount: 0, coverPhoto: null },
     ])
   })
 
-  test('counts only visible photos, newest-updated project first', async () => {
-    order.mockResolvedValue({ data: [], error: null })
-
+  test('counts and covers only visible photos, newest-updated project first', async () => {
     await listProjects()
 
     expect(supabase.from).toHaveBeenCalledWith('projects')
-    expect(select).toHaveBeenCalledWith('*, photos(count)')
-    expect(is).toHaveBeenCalledWith('photos.deleted_at', null)
-    expect(order).toHaveBeenCalledWith('updated_at', { ascending: false })
+    expect(query.select).toHaveBeenCalledWith('*, photos(count), cover:photos(storage_path, thumb_path, updated_at)')
+    expect(query.is).toHaveBeenCalledWith('photos.deleted_at', null)
+    expect(query.is).toHaveBeenCalledWith('cover.deleted_at', null)
+    expect(query.order).toHaveBeenCalledWith('updated_at', { ascending: false })
+  })
+
+  test("uses each project's newest photo as its cover", async () => {
+    await listProjects()
+
+    expect(query.order).toHaveBeenCalledWith('created_at', { referencedTable: 'cover', ascending: false })
+    expect(query.limit).toHaveBeenCalledWith(1, { referencedTable: 'cover' })
   })
 
   test('returns an empty list when there are no projects', async () => {
-    order.mockResolvedValue({ data: [], error: null })
-
     await expect(listProjects()).resolves.toEqual([])
   })
 
   test('throws the Supabase error when the query fails', async () => {
     const supabaseError = new Error('permission denied for table projects')
-    order.mockResolvedValue({ data: null, error: supabaseError })
+    result = { data: null, error: supabaseError }
 
     await expect(listProjects()).rejects.toBe(supabaseError)
   })

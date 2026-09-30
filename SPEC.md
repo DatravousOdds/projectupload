@@ -332,12 +332,11 @@ SPEC.md
 3. TanStack Query setup; create and list projects.
 4. Photo upload pipeline: `photos` and Storage migrations, file validation, compression and thumbnails (`lib/images.ts`), `api/photos.ts` upload, `useUploadPhotos` with progress.
 5. Photos in `ProjectFormModal`: pick, preview grid, remove/replace locally, upload on save, per-photo retry.
-6. `ProjectDetailPage`, including its own upload button (reusing step 4).
-7. `PhotoGrid` and `PhotoViewer` (with versioned URLs from the start).
-8. Delete: `ConfirmDialog`, soft delete, optimistic update, undo toast.
-9. Replace: file picker, confirm, upsert to same paths, row update, verify the new image shows without a hard refresh.
-10. Edge cases: validation, not-found, error states, confirm the blocked operations in the acceptance criteria.
-11. Polish: responsive pass, touch-friendly actions, keyboard navigation, loading skeletons.
+6. `ProjectDetailPage` with `PhotoGrid` (newest first; uploads appear in the grid as they finish) and `PhotoViewer` as an overlay on the same page, plus its own upload button (reusing step 4).
+7. Delete: `ConfirmDialog`, soft delete, optimistic update, undo toast.
+8. Replace: file picker, confirm, upsert to same paths, row update, verify the new image shows without a hard refresh.
+9. Edge cases: validation, not-found, error states, confirm the blocked operations in the acceptance criteria.
+10. Polish: responsive pass, touch-friendly actions, keyboard navigation, loading skeletons.
 
 ## Open questions
 1. Is 15 MB the right max file size for your photos?
