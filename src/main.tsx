@@ -6,7 +6,8 @@ import { routes } from './App.tsx'
 import './index.css'
 
 const queryClient = new QueryClient()
-const router = createBrowserRouter(routes)
+// BASE_URL is Vite's `base`, so routes resolve under /projectupload/ on GitHub Pages.
+const router = createBrowserRouter(routes, { basename: import.meta.env.BASE_URL })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

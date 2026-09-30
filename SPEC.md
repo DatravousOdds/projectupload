@@ -23,7 +23,7 @@ A simple web app for organizing photos into projects. Anyone who opens the app c
 | Build / dev server | Vite (`react-ts` template) |
 | Database | Supabase Postgres |
 | File storage | Supabase Storage (public bucket `photos`) |
-| Hosting | Render Static Site |
+| Hosting | GitHub Pages (deployed by GitHub Actions) |
 | Tests | Vitest + React Testing Library (units/components), Playwright (flows, later) |
 | AI tooling | Claude Code, guided by `CLAUDE.md` and this spec |
 
@@ -273,13 +273,14 @@ VITE_SUPABASE_ANON_KEY=
 - Read them in `src/lib/supabase.ts` via `import.meta.env.VITE_SUPABASE_URL` and `import.meta.env.VITE_SUPABASE_ANON_KEY`. Throw a clear error at startup if either is missing.
 - Declare their types in `src/vite-env.d.ts` so TypeScript knows about them.
 - **Vite rule:** any variable starting with `VITE_` is bundled into the public JavaScript. Only the anon key goes here. The service-role key must never have a `VITE_` prefix and should not be in this project's `.env` at all.
-- On Render, set the same two variables in the static site's Environment settings. Vite reads them at build time, so redeploy after changing them.
+- On GitHub, set the same two variables under Settings → Secrets and variables → Actions → **Variables** (not secrets; both end up in the public JavaScript). Vite reads them at build time, so redeploy after changing them.
 
-## Hosting (Render Static Site)
-- Build command: `npm ci && npm run build`
-- Publish directory: `dist`
-- Auto-deploy from the `main` branch.
-- **Rewrite rule:** source `/*` → destination `/index.html` (action: Rewrite). Required for React Router; without it, refreshing on `/projects/:id` returns a 404.
+## Hosting (GitHub Pages)
+- Live at `https://datravousodds.github.io/projectupload/`.
+- `.github/workflows/deploy.yml` runs on every push to `master` (or by hand): `npm ci`, typecheck, lint, tests, `npm run build`, then publishes `dist`. A failing check stops the deploy.
+- Repo setting: Settings → Pages → Source → **GitHub Actions**.
+- **Sub-path:** Vite's `base` is `/projectupload/`, and the router uses it as its `basename`. Asset and link paths must go through these, never a hard-coded `/`.
+- **No rewrite rules on Pages:** the workflow copies `index.html` to `404.html`. Pages serves it for unknown paths, so refreshing on `/projects/:id` boots the app and React Router shows the right page (the HTTP status is 404, which only search engines notice).
 
 ## Out of scope for v1
 **The acceptance criteria are the scope.** Anything not required by an acceptance criterion is out of scope, including:
@@ -342,7 +343,7 @@ SPEC.md
 ```
 
 ## Build order (slices)
-1. `npm create vite@latest` (react-ts) + Tailwind + React Router; deploy "hello world" to Render with the rewrite rule to prove the pipeline.
+1. `npm create vite@latest` (react-ts) + Tailwind + React Router; deploy "hello world" to GitHub Pages with the 404.html fallback to prove the pipeline.
 2. Supabase project, migrations for tables, triggers, RLS, grants, and bucket; generate types.
 3. TanStack Query setup; create and list projects.
 4. Photo upload pipeline: `photos` and Storage migrations, file validation, compression and thumbnails (`lib/images.ts`), `api/photos.ts` upload, `useUploadPhotos` with progress.

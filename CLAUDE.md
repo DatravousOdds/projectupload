@@ -34,7 +34,7 @@ Keep it concise: no restating the code, no long paragraphs. Skip explanations fo
 
 ## Commands
 ```
-npm run dev         # Vite dev server at http://localhost:5173
+npm run dev         # Vite dev server at http://localhost:5173/projectupload/
 npm run build       # production build to dist/
 npm run typecheck   # tsc -b (checks app + node configs; plain tsc --noEmit checks nothing here)
 npm run lint        # ESLint
@@ -43,7 +43,7 @@ npx supabase gen types typescript --project-id <id> > src/types/database.ts
 ```
 
 ## Stack
-React + TypeScript (strict) + Vite, Tailwind CSS v4, React Router, TanStack Query, Supabase (Postgres + Storage), hosted as a Render Static Site. **No new dependencies without asking.**
+React + TypeScript (strict) + Vite, Tailwind CSS v4, React Router, TanStack Query, Supabase (Postgres + Storage), hosted on GitHub Pages via GitHub Actions. **No new dependencies without asking.**
 
 ## Principles
 - **Functionality first, design later.** Get each feature working and tested before styling it. Iterate on design only after the feature passes its acceptance criteria.
