@@ -118,8 +118,7 @@ Validate every input before using it:
 - **Never read or print `.env`.** If a key is missing, tell me which one.
 - All schema, RLS, grant, trigger, and storage policy changes go in a new file in `supabase/migrations/`. Never edit an existing migration.
 - **Never weaken security to make something work.** Don't disable RLS, add broad policies, or grant extra columns. If an operation is blocked, stop and explain why.
-- Photo queries always filter `deleted_at is null`.
-- Delete is a soft delete (`deleted_at = now()`); never delete rows or Storage files from the app.
+- Delete is permanent: delete the photo row first, then its two Storage files. Never delete projects.
 - Replace overwrites the same Storage paths with `upsert: true`; never create new paths on replace.
 
 ## Image URLs

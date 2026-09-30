@@ -8,7 +8,7 @@ A simple web app for organizing photos into projects. Anyone who opens the app c
 - **All projects and photos are public.** Anyone with the URL (or the Supabase key from the page) can view them. Don't upload anything private.
 - Visitors can **view, add, replace, and delete photos**, and **view and add projects**.
 - **Replace overwrites the photo's file.** The previous image is gone and can't be recovered.
-- **Delete hides the photo (soft delete)**, with an Undo in the app. Deleted photos can also be restored from the Supabase dashboard.
+- **Delete is permanent.** The photo's row and both of its files are removed, freeing storage. There is no undo, and anyone with the page can delete any photo.
 - Upgrade path: if privacy is needed later, add Supabase Auth (anonymous or magic link), add a `user_id` column, and tighten the policies. The rest of the app stays the same.
 
 ## Tech stack
@@ -51,11 +51,10 @@ create table photos (
   height integer,
   caption text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz          -- null = visible; set = soft-deleted
+  updated_at timestamptz not null default now()
 );
 
-create index photos_project_id_idx on photos(project_id) where deleted_at is null;
+create index photos_project_id_idx on photos(project_id);
 ```
 
 Storage paths have no file extension, so a replacement always lands at the same path even if the file type changes (e.g. JPEG → PNG). The browser uses the stored content type to display it.
@@ -65,13 +64,13 @@ Storage paths have no file extension, so a replacement always lands at the same 
 -- Keep projects.updated_at current when photos are added, replaced, or deleted
 create function touch_project() returns trigger as $$
 begin
-  update projects set updated_at = now() where id = new.project_id;
-  return new;
+  update projects set updated_at = now() where id = coalesce(new.project_id, old.project_id);
+  return null;
 end;
 $$ language plpgsql security definer;
 
 create trigger photos_touch_project
-after insert or update on photos
+after insert or update or delete on photos
 for each row execute function touch_project();
 
 -- Stamp photos.updated_at on every change
@@ -93,22 +92,22 @@ RLS stays **enabled** on both tables, with explicit policies for the `anon` role
 | Table | select | insert | update | delete |
 |---|---|---|---|---|
 | projects | allowed | allowed | blocked | blocked |
-| photos | allowed | allowed | allowed (limited columns, see below) | blocked |
+| photos | allowed | allowed | allowed (limited columns, see below) | allowed |
 
-Column-level limits on photo updates, so a client can only change the file details or mark it deleted:
+Column-level limits on photo updates, so a client can only change the file details:
 
 ```sql
 revoke update on photos from anon;
-grant update (file_name, mime_type, size_bytes, width, height, deleted_at)
+grant update (file_name, mime_type, size_bytes, width, height)
   on photos to anon;
 ```
 
-`id`, `project_id`, `storage_path`, `thumb_path`, and `created_at` can't be changed by the client. Deleted photos are filtered out in the app's queries (`deleted_at is null`), not by the select policy, to avoid RLS conflicts when soft-deleting.
+`id`, `project_id`, `storage_path`, `thumb_path`, and `created_at` can't be changed by the client.
 
 ### Storage
 - Bucket `photos` is **public**, so images display with plain public URLs.
 - Bucket settings: file size limit 15 MB; allowed MIME types `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/heic`.
-- Storage policies for `anon` on the `photos` bucket: select, insert, and update allowed (update is needed to overwrite on replace); delete blocked.
+- Storage policies for `anon` on the `photos` bucket: select, insert, and update allowed (update is needed to overwrite on replace). Delete is allowed only for files whose `photos` row no longer exists, so live photos can't lose their files.
 - Uploads set `contentType` to the file's MIME type.
 
 ### Cache busting (replaced photos show immediately)
@@ -136,7 +135,7 @@ Generate with `supabase gen types typescript` into `src/types/database.ts`. Don'
 | `*` | `NotFoundPage` |
 
 ### ProjectListPage
-- Cards: name, photo count (excluding deleted), cover thumbnail (newest visible photo or placeholder), last updated date.
+- Cards: name, photo count, cover thumbnail (newest visible photo or placeholder), last updated date.
 - Sorted by `updated_at` descending.
 - "New project" button opens `ProjectFormModal`.
 - Empty state prompting the first project; loading skeletons while fetching.
@@ -158,7 +157,7 @@ Generate with `supabase gen types typescript` into `src/types/database.ts`. Don'
 - Header: name, description, created date, photo count.
 - Upload button (`accept="image/*"`, `multiple`).
 - Per-file upload progress; failed files show an error and a retry option.
-- Thumbnail grid (`PhotoGrid`), newest first, visible photos only.
+- Thumbnail grid (`PhotoGrid`), newest first.
 - Each thumbnail has an actions menu (visible on hover on desktop, always visible on touch): **Replace** and **Delete**.
 - Empty state when no photos.
 - Unknown id → "Project not found" with link back.
@@ -171,7 +170,7 @@ Generate with `supabase gen types typescript` into `src/types/database.ts`. Don'
 
 ### ConfirmDialog
 Used before both destructive actions. Cancel has default focus; Esc or clicking outside cancels.
-- Delete: "Delete this photo? It will be removed from the project." (red Delete button)
+- Delete: "Delete this photo? This can't be undone." (red Delete button)
 - Replace: "Replace this photo? The current image will be permanently overwritten." (Replace button)
 
 ## Photo flows
@@ -207,14 +206,14 @@ If step 5 fails after step 4 succeeded, the new image is stored but the details 
 
 ### Delete
 1. User clicks Delete → `ConfirmDialog`.
-2. On confirm, set `deleted_at = now()`.
-3. Remove the photo from the grid optimistically; roll back and show an error if the update fails.
+2. On confirm, delete the `photos` row (the trigger updates the project's `updated_at`), then remove its original and thumbnail from Storage.
+3. Remove the photo from the grid optimistically; roll back and show an error if the row delete fails.
 4. In the viewer, move to the next photo, or close if it was the last one.
-5. Show a toast: "Photo deleted" with an **Undo** button for 5 seconds, which sets `deleted_at` back to null.
+5. Invalidate the photos and projects queries so the grid, counts, and list refresh.
 
-To restore a deleted photo later, set `deleted_at` to null on its row in the Supabase dashboard.
+If removing the files fails after the row is gone, the photo is still deleted for the user; log the orphaned paths to the console so they can be cleaned up in the Supabase dashboard.
 
-Hooks: `useUploadPhotos()` (project id passed per call, since the form has none until Save), `useReplacePhoto()`, `useDeletePhoto()`, `useUndoDelete()`.
+Hooks: `useUploadPhotos()` (project id passed per call, since the form has none until Save), `useReplacePhoto()`, `useDeletePhoto()`.
 
 ## Acceptance criteria
 - [ ] A created project appears in the list and persists after refresh and on another device.
@@ -230,8 +229,8 @@ Hooks: `useUploadPhotos()` (project id passed per call, since the form has none 
 - [ ] Replacing a photo asks for confirmation, then shows the new image immediately in the same grid position with the same caption, including after refresh.
 - [ ] After a replace, the Storage bucket still has exactly one original and one thumbnail for that photo (no extra files).
 - [ ] Deleting a photo asks for confirmation, removes it from the grid and counts, and survives refresh.
-- [ ] Undo within 5 seconds restores a deleted photo.
-- [ ] With the anon key, Supabase rejects: deleting any row, updating projects, updating `project_id` or paths on photos, and deleting Storage files.
+- [ ] After a delete, the photo's row and both of its Storage files are gone (storage is freed).
+- [ ] With the anon key, Supabase rejects: deleting or updating projects, updating `project_id` or paths on photos, and deleting Storage files of a photo whose row still exists.
 - [ ] Layout works from 360px phone width to desktop; photo actions are usable on touch devices.
 - [ ] `tsc --noEmit` and ESLint pass; no console errors or React key warnings in normal use.
 
@@ -289,7 +288,7 @@ src/
     validation.ts          # input validation: project form, files, route ids (pure functions)
   api/
     projects.ts            # query/mutation functions
-    photos.ts              # upload, replace (upsert), soft delete, undo, list, versioned URLs
+    photos.ts              # upload, replace (upsert), delete, list, versioned URLs
   hooks/
     useProjects.ts
     useProject.ts
@@ -307,7 +306,6 @@ src/
     PhotoViewer.tsx
     UploadButton.tsx
     ConfirmDialog.tsx
-    Toast.tsx
     EmptyState.tsx
     ErrorState.tsx           # load-failed message with Try again
   pages/
@@ -333,11 +331,10 @@ SPEC.md
 4. Photo upload pipeline: `photos` and Storage migrations, file validation, compression and thumbnails (`lib/images.ts`), `api/photos.ts` upload, `useUploadPhotos` with progress.
 5. Photos in `ProjectFormModal`: pick, preview grid, remove/replace locally, upload on save, per-photo retry.
 6. `ProjectDetailPage` with `PhotoGrid` (newest first; uploads appear in the grid as they finish) and `PhotoViewer` as an overlay on the same page, plus its own upload button (reusing step 4).
-7. Delete: `ConfirmDialog`, soft delete, optimistic update, undo toast.
+7. Delete: `ConfirmDialog`, permanent delete (row, then files), optimistic update.
 8. Replace: file picker, confirm, upsert to same paths, row update, verify the new image shows without a hard refresh.
 9. Edge cases: validation, not-found, error states, confirm the blocked operations in the acceptance criteria.
 10. Polish: responsive pass, touch-friendly actions, keyboard navigation, loading skeletons.
 
 ## Open questions
 1. Is 15 MB the right max file size for your photos?
-2. Should delete also free up storage immediately (permanent delete, no undo), instead of hiding the photo?

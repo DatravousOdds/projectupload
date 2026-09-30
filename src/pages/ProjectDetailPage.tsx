@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import type { Photo } from '../api/photos'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
@@ -136,6 +136,12 @@ export function ProjectDetailPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
+      <Link
+        to="/"
+        className="mb-4 inline-block underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
+        Back to projects
+      </Link>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="break-words text-2xl font-semibold">{project.name}</h1>
