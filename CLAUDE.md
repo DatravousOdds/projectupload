@@ -118,7 +118,7 @@ Validate every input before using it:
 - **Never read or print `.env`.** If a key is missing, tell me which one.
 - All schema, RLS, grant, trigger, and storage policy changes go in a new file in `supabase/migrations/`. Never edit an existing migration.
 - **Never weaken security to make something work.** Don't disable RLS, add broad policies, or grant extra columns. If an operation is blocked, stop and explain why.
-- Delete is permanent: delete the photo row first, then its two Storage files. Never delete projects.
+- Delete is permanent: delete the row first, then its Storage files (a photo's two files, or a project's whole `{project_id}/` folder).
 - Replace overwrites the same Storage paths with `upsert: true`; never create new paths on replace.
 
 ## Image URLs

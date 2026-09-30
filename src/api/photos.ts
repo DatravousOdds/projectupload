@@ -8,6 +8,9 @@ export type PhotoVariant = 'original' | 'thumb'
 
 const PHOTOS_BUCKET = 'photos'
 
+// Storage handles at most 1,000 files per list or remove request.
+const STORAGE_BATCH_SIZE = 1000
+
 // Short browser cache as a backup; the ?v= version in getPhotoUrl is what makes replacements show at once.
 const UPLOAD_CACHE_SECONDS = '60'
 
@@ -21,6 +24,45 @@ async function uploadFile(path: string, blob: Blob, contentType: string): Promis
 
 function logOrphanedFiles(paths: string[]) {
   console.error('Orphaned photo files; delete them in the Supabase dashboard:', paths)
+}
+
+// Only called after the rows are gone: the delete already happened for the user, so leftovers are logged, not thrown.
+async function removeFiles(paths: string[]): Promise<void> {
+  const { data, error } = await supabase.storage.from(PHOTOS_BUCKET).remove(paths)
+
+  // Storage reports policy-blocked removals as fewer removed files, not as an error.
+  if (error || data.length < paths.length) logOrphanedFiles(paths)
+}
+
+async function listProjectFilePaths(projectId: string): Promise<string[]> {
+  const paths: string[] = []
+
+  for (let offset = 0; ; offset += STORAGE_BATCH_SIZE) {
+    const { data, error } = await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .list(projectId, { limit: STORAGE_BATCH_SIZE, offset })
+
+    if (error) throw error
+
+    paths.push(...data.map(({ name }) => `${projectId}/${name}`))
+    if (data.length < STORAGE_BATCH_SIZE) return paths
+  }
+}
+
+// Lists the folder rather than using photo rows, which are already gone; this also clears orphans from failed uploads.
+export async function removeProjectFiles(projectId: string): Promise<void> {
+  let paths: string[]
+
+  try {
+    paths = await listProjectFilePaths(projectId)
+  } catch (error) {
+    console.error(`Couldn't list the deleted project's files; delete the folder ${projectId}/ in the Supabase dashboard:`, error)
+    return
+  }
+
+  for (let start = 0; start < paths.length; start += STORAGE_BATCH_SIZE) {
+    await removeFiles(paths.slice(start, start + STORAGE_BATCH_SIZE))
+  }
 }
 
 // Processes, uploads both files, then saves the row. See SPEC.md → Photo flows → Upload.
@@ -88,12 +130,7 @@ export async function deletePhoto(photoId: string): Promise<void> {
 
   if (error) throw error
 
-  const paths = [data.storage_path, data.thumb_path]
-  const { data: removed, error: removeError } = await supabase.storage.from(PHOTOS_BUCKET).remove(paths)
-
-  // The photo is already gone for the user, so leftover files are logged for cleanup rather than thrown.
-  // Storage reports policy-blocked removals as fewer removed files, not as an error.
-  if (removeError || removed.length < paths.length) logOrphanedFiles(paths)
+  await removeFiles([data.storage_path, data.thumb_path])
 }
 
 // The only place image URLs are built. updated_at changes on replace, so the new file isn't served from cache.

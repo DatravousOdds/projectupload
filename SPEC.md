@@ -6,9 +6,10 @@ A simple web app for organizing photos into projects. Anyone who opens the app c
 ## Access model: open, no login
 - There are no accounts and no login screen. Every visitor sees and works with the same shared set of projects.
 - **All projects and photos are public.** Anyone with the URL (or the Supabase key from the page) can view them. Don't upload anything private.
-- Visitors can **view, add, replace, and delete photos**, and **view and add projects**.
+- Visitors can **view, add, replace, and delete photos**, and **view, add, and delete projects**.
 - **Replace overwrites the photo's file.** The previous image is gone and can't be recovered.
 - **Delete is permanent.** The photo's row and both of its files are removed, freeing storage. There is no undo, and anyone with the page can delete any photo.
+- **Deleting a project is permanent too.** The project, all its photo rows, and all its files are removed. Anyone with the page can delete any project.
 - Upgrade path: if privacy is needed later, add Supabase Auth (anonymous or magic link), add a `user_id` column, and tighten the policies. The rest of the app stays the same.
 
 ## Tech stack
@@ -95,7 +96,7 @@ RLS stays **enabled** on both tables, with explicit policies for the `anon` role
 
 | Table | select | insert | update | delete |
 |---|---|---|---|---|
-| projects | allowed | allowed | blocked | blocked |
+| projects | allowed | allowed | blocked | allowed |
 | photos | allowed | allowed | allowed (limited columns, see below) | allowed |
 
 Column-level limits on photo updates, so a client can only change the file details:
@@ -163,6 +164,7 @@ Generate with `supabase gen types typescript` into `src/types/database.ts`. Don'
 - Per-file upload progress; failed files show an error and a retry option.
 - Thumbnail grid (`PhotoGrid`), newest first.
 - Each thumbnail has an actions menu (visible on hover on desktop, always visible on touch): **Replace** and **Delete**.
+- **Delete project** button (disabled while photos upload): `ConfirmDialog`, then see Photo flows → Delete project.
 - Empty state when no photos.
 - Unknown id → "Project not found" with link back.
 
@@ -173,8 +175,9 @@ Generate with `supabase gen types typescript` into `src/types/database.ts`. Don'
 - Prev/next buttons and arrow keys; Esc closes; focus is trapped while open and returned to the thumbnail on close.
 
 ### ConfirmDialog
-Used before both destructive actions. Cancel has default focus; Esc or clicking outside cancels.
+Used before every destructive action. Cancel has default focus; Esc or clicking outside cancels.
 - Delete: "Delete this photo? This can't be undone." (red Delete button)
+- Delete project: "Delete this project and all its photos? This can't be undone." (red Delete button)
 - Replace: "Replace this photo? The current image will be permanently overwritten." (Replace button)
 
 ## Photo flows
@@ -217,7 +220,15 @@ If step 5 fails after step 4 succeeded, the new image is stored but the details 
 
 If removing the files fails after the row is gone, the photo is still deleted for the user; log the orphaned paths to the console so they can be cleaned up in the Supabase dashboard.
 
-Hooks: `useUploadPhotos()` (project id passed per call, since the form has none until Save), `useReplacePhoto()`, `useDeletePhoto()`.
+### Delete project
+1. User clicks Delete project → `ConfirmDialog`.
+2. On confirm, delete the `projects` row. Its `photos` rows go with it (`on delete cascade`), and uploads into it are blocked from then on.
+3. List every file under `{project_id}/` in Storage and remove them. This also clears files orphaned by earlier failed uploads.
+4. Go back to the project list, which refreshes without the project. While the delete runs, the button shows "Deleting…"; if the row delete fails, stay on the page and show an error.
+
+If removing the files fails after the row is gone, the project is still deleted for the user; log the orphaned paths to the console so they can be cleaned up in the Supabase dashboard.
+
+Hooks: `useUploadPhotos()` (project id passed per call, since the form has none until Save), `useReplacePhoto()`, `useDeletePhoto()`, `useDeleteProject()`.
 
 ## Acceptance criteria
 - [ ] A created project appears in the list and persists after refresh and on another device.
@@ -234,7 +245,8 @@ Hooks: `useUploadPhotos()` (project id passed per call, since the form has none 
 - [ ] After a replace, the Storage bucket still has exactly one original and one thumbnail for that photo (no extra files).
 - [ ] Deleting a photo asks for confirmation, removes it from the grid and counts, and survives refresh.
 - [ ] After a delete, the photo's row and both of its Storage files are gone (storage is freed).
-- [ ] With the anon key, Supabase rejects: deleting or updating projects, updating `project_id` or paths on photos, and deleting Storage files of a photo whose row still exists.
+- [ ] Deleting a project asks for confirmation, removes the project, all its photo rows and all its Storage files, and returns to the project list.
+- [ ] With the anon key, Supabase rejects: updating projects, updating `project_id` or paths on photos, and deleting Storage files of a photo whose row still exists.
 - [ ] Layout works from 360px phone width to desktop; photo actions are usable on touch devices.
 - [ ] `tsc --noEmit` and ESLint pass; no console errors or React key warnings in normal use.
 
@@ -291,7 +303,7 @@ src/
     format.ts              # dates, file sizes, photo counts for display
     validation.ts          # input validation: project form, files, route ids (pure functions)
   api/
-    projects.ts            # query/mutation functions
+    projects.ts            # create, list, get, delete (row, then its Storage folder)
     photos.ts              # upload, replace (upsert), delete, list, versioned URLs
   hooks/
     useProjects.ts
@@ -300,6 +312,7 @@ src/
     useUploadPhotos.ts
     useReplacePhoto.ts
     useDeletePhoto.ts
+    useDeleteProject.ts
   components/
     AppHeader.tsx
     ProjectCard.tsx
@@ -335,7 +348,7 @@ SPEC.md
 4. Photo upload pipeline: `photos` and Storage migrations, file validation, compression and thumbnails (`lib/images.ts`), `api/photos.ts` upload, `useUploadPhotos` with progress.
 5. Photos in `ProjectFormModal`: pick, preview grid, remove/replace locally, upload on save, per-photo retry.
 6. `ProjectDetailPage` with `PhotoGrid` (newest first; uploads appear in the grid as they finish) and `PhotoViewer` as an overlay on the same page, plus its own upload button (reusing step 4).
-7. Delete: `ConfirmDialog`, permanent delete (row, then files), optimistic update.
+7. Delete: `ConfirmDialog`, permanent delete (row, then files), optimistic update; delete project from its page.
 8. Replace: file picker, confirm, upsert to same paths, row update, verify the new image shows without a hard refresh.
 9. Edge cases: validation, not-found, error states, confirm the blocked operations in the acceptance criteria.
 10. Polish: responsive pass, touch-friendly actions, keyboard navigation, loading skeletons.

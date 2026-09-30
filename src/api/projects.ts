@@ -1,6 +1,7 @@
 import type { ProjectInput } from '../lib/validation'
 import type { Tables } from '../types/database'
 import { supabase } from '../lib/supabase'
+import { removeProjectFiles } from './photos'
 
 export async function createProject(input: ProjectInput): Promise<Tables<'projects'>> {
   const { data, error } = await supabase
@@ -60,4 +61,13 @@ export async function getProject(id: string): Promise<ProjectWithPhotoCount | nu
   if (error) throw error
 
   return data ? withPhotoCount(data) : null
+}
+
+// Permanent: the row goes first (its photo rows cascade with it), then its files. See SPEC.md → Delete project.
+export async function deleteProject(id: string): Promise<void> {
+  const { error } = await supabase.from('projects').delete().eq('id', id).select('id').single()
+
+  if (error) throw error
+
+  await removeProjectFiles(id)
 }

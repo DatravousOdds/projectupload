@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import type { Photo } from '../api/photos'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
@@ -10,6 +10,7 @@ import { PhotoViewer } from '../components/PhotoViewer'
 import { UploadButton } from '../components/UploadButton'
 import { usePhotos } from '../hooks/usePhotos'
 import { useDeletePhoto } from '../hooks/useDeletePhoto'
+import { useDeleteProject } from '../hooks/useDeleteProject'
 import { useProject } from '../hooks/useProject'
 import { useUploadPhotos } from '../hooks/useUploadPhotos'
 import type { PhotoUpload } from '../hooks/useUploadPhotos'
@@ -25,12 +26,15 @@ export function ProjectDetailPage() {
   const photosQuery = usePhotos(id)
   const { uploadStates, uploadPhotos, isUploading } = useUploadPhotos()
   const deletePhotoMutation = useDeletePhoto()
+  const deleteProjectMutation = useDeleteProject()
+  const navigate = useNavigate()
 
   // This visit's uploads, newest first.
   const [uploads, setUploads] = useState<PhotoUpload[]>([])
   const [pickErrors, setPickErrors] = useState<string[]>([])
   const [openPhotoId, setOpenPhotoId] = useState<string | null>(null)
   const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null)
+  const [isConfirmingProjectDelete, setIsConfirmingProjectDelete] = useState(false)
 
   // Checked before isPending: an invalid id never starts a query, so it would stay pending forever.
   if (!id || !isValidUuid(id)) return <NotFoundPage title="Project not found" />
@@ -87,6 +91,11 @@ export function ProjectDetailPage() {
     setUploads((previous) => previous.filter(({ key }) => uploadStates[key]?.photo?.id !== photo.id))
 
     deletePhotoMutation.mutate(photo)
+  }
+
+  function handleConfirmProjectDelete(projectId: string) {
+    setIsConfirmingProjectDelete(false)
+    deleteProjectMutation.mutate(projectId, { onSuccess: () => navigate('/') })
   }
 
   if (projectQuery.isPending) {
@@ -171,8 +180,25 @@ export function ProjectDetailPage() {
             Created {formatDate(project.created_at)} · {formatPhotoCount(project.photoCount)}
           </p>
         </div>
-        <UploadButton onPick={handlePick} disabled={isUploading} />
+        <div className="flex flex-wrap gap-2">
+          <UploadButton onPick={handlePick} disabled={isUploading || deleteProjectMutation.isPending} />
+          {/* Disabled during uploads, which would fail once the project is gone. */}
+          <button
+            type="button"
+            onClick={() => setIsConfirmingProjectDelete(true)}
+            disabled={isUploading || deleteProjectMutation.isPending}
+            className="rounded border border-red-300 px-4 py-2 text-red-700 hover:bg-red-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            {deleteProjectMutation.isPending ? 'Deleting…' : 'Delete project'}
+          </button>
+        </div>
       </header>
+
+      {deleteProjectMutation.isError && (
+        <p role="alert" className="mt-4 text-sm text-red-700">
+          Couldn't delete this project. Check your connection and try again.
+        </p>
+      )}
 
       {deletePhotoMutation.isError && (
         <p role="alert" className="mt-4 text-sm text-red-700">
@@ -211,6 +237,15 @@ export function ProjectDetailPage() {
           confirmLabel="Delete"
           onConfirm={() => handleConfirmDelete(photoToDelete)}
           onCancel={() => setPhotoToDelete(null)}
+        />
+      )}
+
+      {isConfirmingProjectDelete && (
+        <ConfirmDialog
+          message="Delete this project and all its photos? This can't be undone."
+          confirmLabel="Delete"
+          onConfirm={() => handleConfirmProjectDelete(project.id)}
+          onCancel={() => setIsConfirmingProjectDelete(false)}
         />
       )}
     </main>

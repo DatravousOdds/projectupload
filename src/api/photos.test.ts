@@ -3,7 +3,7 @@ import { processPhoto } from '../lib/images'
 import type { ProcessedPhoto } from '../lib/images'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
-import { deletePhoto, getPhotoUrl, listPhotos, uploadPhoto } from './photos'
+import { deletePhoto, getPhotoUrl, listPhotos, removeProjectFiles, uploadPhoto } from './photos'
 
 // Swap the real client for a fake so tests never reach Supabase.
 vi.mock('../lib/supabase', () => ({ supabase: { from: vi.fn(), storage: { from: vi.fn() } } }))
@@ -251,6 +251,74 @@ describe('deletePhoto', () => {
 
     await deletePhoto(PHOTO_ID)
 
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Orphaned'), [STORAGE_PATH, THUMB_PATH])
+  })
+})
+
+describe('removeProjectFiles', () => {
+  // Fake the Storage calls: storage.from('photos').list(...) and .remove([...])
+  const list = vi.fn()
+  const remove = vi.fn()
+
+  const fileNames = (count: number, start = 0) =>
+    Array.from({ length: count }, (_, index) => ({ name: `photo-${start + index}` }))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(supabase.storage.from).mockReturnValue({ list, remove } as unknown as StorageBucket)
+    remove.mockImplementation(async (paths: string[]) => ({ data: paths.map((name) => ({ name })), error: null }))
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test("removes every file in the project's folder", async () => {
+    list.mockResolvedValue({ data: [{ name: PHOTO_ID }, { name: `${PHOTO_ID}_thumb` }], error: null })
+
+    await removeProjectFiles(PROJECT_ID)
+
+    expect(supabase.storage.from).toHaveBeenCalledWith('photos')
+    expect(list).toHaveBeenCalledWith(PROJECT_ID, { limit: 1000, offset: 0 })
+    expect(remove).toHaveBeenCalledWith([STORAGE_PATH, THUMB_PATH])
+  })
+
+  test('lists and removes large folders 1,000 files at a time', async () => {
+    list
+      .mockResolvedValueOnce({ data: fileNames(1000), error: null })
+      .mockResolvedValueOnce({ data: fileNames(5, 1000), error: null })
+
+    await removeProjectFiles(PROJECT_ID)
+
+    expect(list).toHaveBeenNthCalledWith(2, PROJECT_ID, { limit: 1000, offset: 1000 })
+    expect(remove).toHaveBeenCalledTimes(2)
+    expect(remove.mock.calls[0][0]).toHaveLength(1000)
+    expect(remove.mock.calls[1][0]).toEqual(fileNames(5, 1000).map(({ name }) => `${PROJECT_ID}/${name}`))
+  })
+
+  test('does nothing for an empty folder', async () => {
+    list.mockResolvedValue({ data: [], error: null })
+
+    await removeProjectFiles(PROJECT_ID)
+
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  test('logs the folder for cleanup but still resolves when listing fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    list.mockResolvedValue({ data: null, error: new Error('network down') })
+
+    await expect(removeProjectFiles(PROJECT_ID)).resolves.toBeUndefined()
+    expect(remove).not.toHaveBeenCalled()
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining(`${PROJECT_ID}/`), expect.any(Error))
+  })
+
+  test('logs the orphaned files but still resolves when removing them fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    list.mockResolvedValue({ data: [{ name: PHOTO_ID }, { name: `${PHOTO_ID}_thumb` }], error: null })
+    remove.mockResolvedValue({ data: null, error: new Error('network down') })
+
+    await expect(removeProjectFiles(PROJECT_ID)).resolves.toBeUndefined()
     expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Orphaned'), [STORAGE_PATH, THUMB_PATH])
   })
 })

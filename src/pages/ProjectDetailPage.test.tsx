@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Photo } from '../api/photos'
 import type { ProjectWithPhotoCount } from '../api/projects'
 import { useDeletePhoto } from '../hooks/useDeletePhoto'
+import { useDeleteProject } from '../hooks/useDeleteProject'
 import { usePhotos } from '../hooks/usePhotos'
 import { useProject } from '../hooks/useProject'
 import { useUploadPhotos } from '../hooks/useUploadPhotos'
@@ -14,6 +15,7 @@ import { ProjectDetailPage } from './ProjectDetailPage'
 vi.mock('../hooks/useProject', () => ({ useProject: vi.fn() }))
 vi.mock('../hooks/usePhotos', () => ({ usePhotos: vi.fn() }))
 vi.mock('../hooks/useDeletePhoto', () => ({ useDeletePhoto: vi.fn() }))
+vi.mock('../hooks/useDeleteProject', () => ({ useDeleteProject: vi.fn() }))
 vi.mock('../hooks/useUploadPhotos', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../hooks/useUploadPhotos')>()),
   useUploadPhotos: vi.fn(),
@@ -25,6 +27,7 @@ vi.mock('../api/photos', () => ({
 type ProjectResult = ReturnType<typeof useProject>
 type PhotosResult = ReturnType<typeof usePhotos>
 type DeleteResult = ReturnType<typeof useDeletePhoto>
+type DeleteProjectResult = ReturnType<typeof useDeleteProject>
 
 const PROJECT_ID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b'
 const UPLOAD_KEY = '00000000-0000-4000-8000-000000000001'
@@ -33,6 +36,7 @@ const refetchProject = vi.fn()
 const refetchPhotos = vi.fn()
 const uploadPhotos = vi.fn()
 const deletePhoto = vi.fn()
+const deleteProject = vi.fn()
 
 const gardenProject: ProjectWithPhotoCount = {
   id: PROJECT_ID,
@@ -94,10 +98,20 @@ function mockDelete(state: Partial<DeleteResult> = {}) {
   vi.mocked(useDeletePhoto).mockReturnValue({ mutate: deletePhoto, isError: false, ...state } as unknown as DeleteResult)
 }
 
+function mockDeleteProject(state: Partial<DeleteProjectResult> = {}) {
+  vi.mocked(useDeleteProject).mockReturnValue({
+    mutate: deleteProject,
+    isPending: false,
+    isError: false,
+    ...state,
+  } as unknown as DeleteProjectResult)
+}
+
 function pageAt(path: string) {
   return (
     <MemoryRouter initialEntries={[path]}>
       <Routes>
+        <Route path="/" element={<h1>All projects</h1>} />
         <Route path="/projects/:id" element={<ProjectDetailPage />} />
       </Routes>
     </MemoryRouter>
@@ -118,6 +132,7 @@ beforeEach(() => {
   mockPhotos({ data: [] })
   mockUploads()
   mockDelete()
+  mockDeleteProject()
   vi.spyOn(crypto, 'randomUUID').mockReturnValue(UPLOAD_KEY)
 })
 
@@ -387,5 +402,63 @@ describe('ProjectDetailPage: deleting', () => {
     renderPage()
 
     expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t delete "older.jpg".')
+  })
+})
+
+describe('ProjectDetailPage: deleting the project', () => {
+  const DELETE_PROJECT_MESSAGE = "Delete this project and all its photos? This can't be undone."
+
+  function confirmProjectDelete() {
+    const confirmDialog = screen.getByRole('dialog', { name: DELETE_PROJECT_MESSAGE })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
+  }
+
+  test('asks for confirmation, deletes the project, and returns to the project list', () => {
+    deleteProject.mockImplementation((_projectId: string, options?: { onSuccess?: () => void }) => options?.onSuccess?.())
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }))
+    expect(deleteProject).not.toHaveBeenCalled()
+
+    confirmProjectDelete()
+
+    expect(deleteProject).toHaveBeenCalledWith(PROJECT_ID, expect.anything())
+    expect(screen.getByRole('heading', { name: 'All projects' })).toBeInTheDocument()
+  })
+
+  test('keeps the project when the confirmation is cancelled', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(deleteProject).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Garden' })).toBeInTheDocument()
+  })
+
+  test('shows progress and blocks uploads while the project is being deleted', () => {
+    mockDeleteProject({ isPending: true })
+
+    renderPage()
+
+    expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Upload photos' })).toBeDisabled()
+  })
+
+  test('cannot be deleted while photos are uploading', () => {
+    mockUploads({ isUploading: true })
+
+    renderPage()
+
+    expect(screen.getByRole('button', { name: 'Delete project' })).toBeDisabled()
+  })
+
+  test('stays on the page with an error when the delete fails', () => {
+    mockDeleteProject({ isError: true })
+
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't delete this project.")
+    expect(screen.getByRole('heading', { name: 'Garden' })).toBeInTheDocument()
   })
 })

@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
-import { createProject, getProject, listProjects } from './projects'
+import { removeProjectFiles } from './photos'
+import { createProject, deleteProject, getProject, listProjects } from './projects'
 
 // Swap the real client for a fake so tests never reach Supabase.
 vi.mock('../lib/supabase', () => ({ supabase: { from: vi.fn() } }))
+
+// Storage cleanup has its own tests in photos.test.ts.
+vi.mock('./photos', () => ({ removeProjectFiles: vi.fn() }))
 
 type FromResult = ReturnType<typeof supabase.from>
 
@@ -159,5 +163,36 @@ describe('getProject', () => {
     maybeSingle.mockResolvedValue({ data: null, error: supabaseError })
 
     await expect(getProject(projectRow.id)).rejects.toBe(supabaseError)
+  })
+})
+
+describe('deleteProject', () => {
+  // Fake the chain: from('projects').delete().eq(...).select(...).single()
+  const single = vi.fn()
+  const select = vi.fn(() => ({ single }))
+  const eq = vi.fn(() => ({ select }))
+  const deleteRow = vi.fn(() => ({ eq }))
+
+  beforeEach(() => {
+    vi.mocked(supabase.from).mockReturnValue({ delete: deleteRow } as unknown as FromResult)
+    vi.mocked(removeProjectFiles).mockResolvedValue()
+    single.mockResolvedValue({ data: { id: projectRow.id }, error: null })
+  })
+
+  test("deletes the project row, then its Storage folder", async () => {
+    await deleteProject(projectRow.id)
+
+    expect(supabase.from).toHaveBeenCalledWith('projects')
+    expect(eq).toHaveBeenCalledWith('id', projectRow.id)
+    expect(removeProjectFiles).toHaveBeenCalledWith(projectRow.id)
+    expect(single.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(removeProjectFiles).mock.invocationCallOrder[0])
+  })
+
+  test('throws without touching Storage when the row delete fails', async () => {
+    const supabaseError = new Error('JSON object requested, multiple (or no) rows returned')
+    single.mockResolvedValue({ data: null, error: supabaseError })
+
+    await expect(deleteProject(projectRow.id)).rejects.toBe(supabaseError)
+    expect(removeProjectFiles).not.toHaveBeenCalled()
   })
 })
