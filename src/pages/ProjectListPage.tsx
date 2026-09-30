@@ -1,14 +1,14 @@
 import type { ReactNode } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
-import { ProjectCard } from '../components/ProjectCard';
+import { COVER_CLASSES, ProjectCard } from '../components/ProjectCard';
 import { ProjectFormModal } from '../components/ProjectFormModal';
 import { useProjects } from '../hooks/useProjects';
 import { useState } from 'react';
 
 
 // Shared by the loading placeholders and the real list so nothing shifts when data arrives.
-const PROJECT_GRID_CLASSES = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3';
+const PROJECT_LIST_CLASSES = 'flex flex-col gap-3';
 const PLACEHOLDER_CARD_COUNT = 6;
 
 
@@ -28,12 +28,14 @@ export function ProjectListPage() {
       <div aria-busy="true">
         <p className="sr-only">Loading projects…</p>
 
-        <ul className={PROJECT_GRID_CLASSES} aria-hidden="true">
+        <ul className={PROJECT_LIST_CLASSES} aria-hidden="true">
           {Array.from({ length: PLACEHOLDER_CARD_COUNT }, (_, index) => (
-            <li key={index} className="rounded-lg border border-gray-200 p-3">
-              <div className="aspect-[4/3] rounded bg-gray-200" />
-              <div className="mt-3 h-5 w-2/3 rounded bg-gray-200" />
-              <div className="mt-2 h-4 w-1/2 rounded bg-gray-200" />
+            <li key={index} className="flex items-center gap-4 rounded-lg border border-gray-200 p-3">
+              <div className={COVER_CLASSES} />
+              <div className="flex-1">
+                <div className="h-5 w-2/3 rounded bg-gray-200" />
+                <div className="mt-2 h-4 w-1/2 rounded bg-gray-200" />
+              </div>
             </li>
           ))}
         </ul>
@@ -49,7 +51,7 @@ export function ProjectListPage() {
     content = <EmptyState title="No projects yet" message="Create your first project to start adding photos." />
   } else {
     content = (
-      <ul className={PROJECT_GRID_CLASSES}>
+      <ul className={PROJECT_LIST_CLASSES}>
         {projects.map((project) => (
           <li key={project.id}>
             <ProjectCard project={project} />
