@@ -11,6 +11,9 @@ vi.mock('../api/photos', () => ({ uploadPhoto: vi.fn() }))
 
 const PROJECT_ID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b'
 
+// Only the id matters here; the grid uses the rest.
+const uploadedPhoto = { id: '11111111-2222-4333-8444-555555555555' } as Photo
+
 function makeUploads(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     key: `photo-${index}`,
@@ -32,7 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   queryClient = new QueryClient()
   vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
-  vi.mocked(uploadPhoto).mockResolvedValue({} as Photo)
+  vi.mocked(uploadPhoto).mockResolvedValue(uploadedPhoto)
 })
 
 afterEach(() => {
@@ -53,8 +56,8 @@ describe('useUploadPhotos', () => {
     expect(uploadPhoto).toHaveBeenCalledWith(PROJECT_ID, uploads[1].file)
     expect(outcome).toEqual({ failedKeys: [] })
     expect(result.current.uploadStates).toEqual({
-      'photo-0': { status: 'done', errorMessage: null },
-      'photo-1': { status: 'done', errorMessage: null },
+      'photo-0': { status: 'done', errorMessage: null, photo: uploadedPhoto },
+      'photo-1': { status: 'done', errorMessage: null, photo: uploadedPhoto },
     })
     expect(result.current.isUploading).toBe(false)
   })
@@ -131,8 +134,8 @@ describe('useUploadPhotos', () => {
 
     expect(outcome).toEqual({ failedKeys: ['photo-0'] })
     expect(result.current.uploadStates).toEqual({
-      'photo-0': { status: 'failed', errorMessage: 'Couldn\'t upload "photo-0.jpg".' },
-      'photo-1': { status: 'done', errorMessage: null },
+      'photo-0': { status: 'failed', errorMessage: 'Couldn\'t upload "photo-0.jpg".', photo: null },
+      'photo-1': { status: 'done', errorMessage: null, photo: uploadedPhoto },
     })
     expect(consoleError).toHaveBeenCalled()
   })
@@ -150,7 +153,7 @@ describe('useUploadPhotos', () => {
       await result.current.uploadPhotos(PROJECT_ID, [upload])
     })
 
-    expect(result.current.uploadStates['photo-0']).toEqual({ status: 'done', errorMessage: null })
+    expect(result.current.uploadStates['photo-0']).toEqual({ status: 'done', errorMessage: null, photo: uploadedPhoto })
   })
 
   test('skips the refresh when nothing uploaded', async () => {

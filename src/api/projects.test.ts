@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
-import { createProject, listProjects } from './projects'
+import { createProject, getProject, listProjects } from './projects'
 
 // Swap the real client for a fake so tests never reach Supabase.
 vi.mock('../lib/supabase', () => ({ supabase: { from: vi.fn() } }))
@@ -105,5 +105,42 @@ describe('listProjects', () => {
     order.mockResolvedValue({ data: null, error: supabaseError })
 
     await expect(listProjects()).rejects.toBe(supabaseError)
+  })
+})
+
+describe('getProject', () => {
+  // Fake the chain: from('projects').select(...).is(...).eq(...).maybeSingle()
+  const maybeSingle = vi.fn()
+  const eq = vi.fn(() => ({ maybeSingle }))
+  const is = vi.fn(() => ({ eq }))
+  const select = vi.fn(() => ({ is }))
+
+  beforeEach(() => {
+    vi.mocked(supabase.from).mockReturnValue({ select } as unknown as FromResult)
+  })
+
+  test('returns the project with its visible photo count', async () => {
+    maybeSingle.mockResolvedValue({ data: { ...projectRow, photos: [{ count: 2 }] }, error: null })
+
+    const project = await getProject(projectRow.id)
+
+    expect(project).toEqual({ ...projectRow, photoCount: 2 })
+    expect(supabase.from).toHaveBeenCalledWith('projects')
+    expect(select).toHaveBeenCalledWith('*, photos(count)')
+    expect(is).toHaveBeenCalledWith('photos.deleted_at', null)
+    expect(eq).toHaveBeenCalledWith('id', projectRow.id)
+  })
+
+  test('returns null when no project has that id', async () => {
+    maybeSingle.mockResolvedValue({ data: null, error: null })
+
+    await expect(getProject(projectRow.id)).resolves.toBeNull()
+  })
+
+  test('throws the Supabase error when the query fails', async () => {
+    const supabaseError = new Error('network down')
+    maybeSingle.mockResolvedValue({ data: null, error: supabaseError })
+
+    await expect(getProject(projectRow.id)).rejects.toBe(supabaseError)
   })
 })

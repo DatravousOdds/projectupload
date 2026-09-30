@@ -236,7 +236,7 @@ describe('ProjectFormModal: uploading on save', () => {
     clickSave()
     await finishCreatingProject()
 
-    mockUploadPhotos({ uploadStates: { [failedKey]: { status: 'failed', errorMessage: 'Couldn\'t upload "front.jpg".' } } })
+    mockUploadPhotos({ uploadStates: { [failedKey]: { status: 'failed', errorMessage: 'Couldn\'t upload "front.jpg".', photo: null } } })
     rerender(<ProjectFormModal onClose={onClose} />)
 
     expect(screen.getByText('Couldn\'t upload "front.jpg".')).toBeInTheDocument()

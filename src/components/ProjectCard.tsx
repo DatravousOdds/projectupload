@@ -1,11 +1,12 @@
 import { Link } from 'react-router'
 import type { ProjectWithPhotoCount } from '../api/projects'
+import { formatDate, formatPhotoCount } from '../lib/format'
 
 type ProjectCardProps = { project: ProjectWithPhotoCount }
 
 export function ProjectCard({ project }: ProjectCardProps) {
-  const photoLabel = project.photoCount === 1 ? '1 photo' : `${project.photoCount} photos`
-  const updatedDate = new Date(project.updated_at).toLocaleDateString(undefined, { dateStyle: 'medium' })
+  const photoLabel = formatPhotoCount(project.photoCount)
+  const updatedDate = formatDate(project.updated_at)
 
   return (
     <Link

@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorState } from '../components/ErrorState';
 import { ProjectCard } from '../components/ProjectCard';
 import { ProjectFormModal } from '../components/ProjectFormModal';
 import { useProjects } from '../hooks/useProjects';
@@ -41,24 +43,10 @@ export function ProjectListPage() {
     console.error('Failed to load projects:', error)
 
     content = (
-      <div role="alert" className="rounded-lg border border-gray-200 p-6 text-center">
-        <p>Couldn't load projects. Check your connection and try again.</p>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="mt-4 rounded border border-gray-300 px-4 py-2 hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-        >
-          Try again
-        </button>
-      </div>
+      <ErrorState message="Couldn't load projects. Check your connection and try again." onRetry={() => refetch()} />
     )
   } else if (projects.length === 0) {
-    content = (
-      <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center">
-        <p className="font-semibold">No projects yet</p>
-        <p className="mt-1 text-sm text-gray-600">Create your first project to start adding photos.</p>
-      </div>
-    )
+    content = <EmptyState title="No projects yet" message="Create your first project to start adding photos." />
   } else {
     content = (
       <ul className={PROJECT_GRID_CLASSES}>

@@ -1,13 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { uploadPhoto } from '../api/photos'
+import type { Photo } from '../api/photos'
 
 // Decoding a large photo takes tens of MB, so only a few are processed at once.
 const UPLOAD_BATCH_SIZE = 3
 
 export type UploadStatus = 'waiting' | 'uploading' | 'done' | 'failed'
 
-export type UploadState = { status: UploadStatus; errorMessage: string | null }
+// `photo` is the saved row once done, so it can be shown before the photo list refreshes.
+export type UploadState = { status: UploadStatus; errorMessage: string | null; photo: Photo | null }
+
+// Shown next to each photo; failed photos show their errorMessage instead.
+export const UPLOAD_STATUS_LABELS = {
+  waiting: 'Waiting…',
+  uploading: 'Uploading…',
+  done: 'Uploaded',
+} as const
 
 // `key` is the caller's id for the photo, so its status can be shown next to it.
 export type PhotoUpload = { key: string; file: File }
@@ -26,15 +35,15 @@ export function useUploadPhotos() {
   }
 
   async function uploadOne(projectId: string, { key, file }: PhotoUpload): Promise<boolean> {
-    setUploadState(key, { status: 'uploading', errorMessage: null })
+    setUploadState(key, { status: 'uploading', errorMessage: null, photo: null })
 
     try {
-      await uploadPhoto(projectId, file)
-      setUploadState(key, { status: 'done', errorMessage: null })
+      const photo = await uploadPhoto(projectId, file)
+      setUploadState(key, { status: 'done', errorMessage: null, photo })
       return true
     } catch (error) {
       console.error(`Failed to upload ${file.name}:`, error)
-      setUploadState(key, { status: 'failed', errorMessage: `Couldn't upload "${file.name}".` })
+      setUploadState(key, { status: 'failed', errorMessage: `Couldn't upload "${file.name}".`, photo: null })
       return false
     }
   }
@@ -43,7 +52,7 @@ export function useUploadPhotos() {
   async function uploadPhotos(projectId: string, uploads: PhotoUpload[]): Promise<{ failedKeys: string[] }> {
     setUploadStates((previous) => {
       const next = { ...previous }
-      for (const { key } of uploads) next[key] = { status: 'waiting', errorMessage: null }
+      for (const { key } of uploads) next[key] = { status: 'waiting', errorMessage: null, photo: null }
       return next
     })
 

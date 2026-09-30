@@ -3,7 +3,7 @@ import { processPhoto } from '../lib/images'
 import type { ProcessedPhoto } from '../lib/images'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
-import { getPhotoUrl, uploadPhoto } from './photos'
+import { getPhotoUrl, listPhotos, uploadPhoto } from './photos'
 
 // Swap the real client for a fake so tests never reach Supabase.
 vi.mock('../lib/supabase', () => ({ supabase: { from: vi.fn(), storage: { from: vi.fn() } } }))
@@ -163,5 +163,38 @@ describe('getPhotoUrl', () => {
 
     expect(getPhotoUrl(replaced, 'thumb')).not.toBe(getPhotoUrl(photoRow, 'thumb'))
     expect(getPhotoUrl(replaced, 'thumb')).toMatch(/\?v=1790683512$/)
+  })
+})
+
+describe('listPhotos', () => {
+  // Fake the chain: from('photos').select('*').eq(...).is(...).order(...)
+  const order = vi.fn()
+  const is = vi.fn(() => ({ order }))
+  const eq = vi.fn(() => ({ is }))
+  const select = vi.fn(() => ({ eq }))
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(supabase.from).mockReturnValue({ select } as unknown as FromResult)
+  })
+
+  test("returns the project's visible photos, newest first", async () => {
+    order.mockResolvedValue({ data: [photoRow], error: null })
+
+    const photos = await listPhotos(PROJECT_ID)
+
+    expect(photos).toEqual([photoRow])
+    expect(supabase.from).toHaveBeenCalledWith('photos')
+    expect(select).toHaveBeenCalledWith('*')
+    expect(eq).toHaveBeenCalledWith('project_id', PROJECT_ID)
+    expect(is).toHaveBeenCalledWith('deleted_at', null)
+    expect(order).toHaveBeenCalledWith('created_at', { ascending: false })
+  })
+
+  test('throws the Supabase error when the query fails', async () => {
+    const supabaseError = new Error('network down')
+    order.mockResolvedValue({ data: null, error: supabaseError })
+
+    await expect(listPhotos(PROJECT_ID)).rejects.toBe(supabaseError)
   })
 })

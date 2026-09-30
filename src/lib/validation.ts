@@ -58,3 +58,10 @@ export function getPhotoFileError(file: File): string | null {
 
   return null
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Checks a route :id before querying, so malformed URLs go straight to not-found.
+export function isValidUuid(value: string): boolean {
+  return UUID_PATTERN.test(value)
+}

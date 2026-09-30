@@ -284,7 +284,8 @@ src/
   vite-env.d.ts            # types for import.meta.env variables
   lib/
     supabase.ts            # client singleton, env check
-    images.ts              # validation, dimensions, thumbnails (pure functions)
+    images.ts              # compression, dimensions, thumbnails
+    format.ts              # dates, file sizes, photo counts for display
     validation.ts          # input validation: project form, files, route ids (pure functions)
   api/
     projects.ts            # query/mutation functions
@@ -308,6 +309,7 @@ src/
     ConfirmDialog.tsx
     Toast.tsx
     EmptyState.tsx
+    ErrorState.tsx           # load-failed message with Try again
   pages/
     ProjectListPage.tsx
     ProjectDetailPage.tsx

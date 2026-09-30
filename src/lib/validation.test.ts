@@ -4,6 +4,7 @@ import {
   MAX_PROJECT_DESCRIPTION_LENGTH,
   MAX_PROJECT_NAME_LENGTH,
   getPhotoFileError,
+  isValidUuid,
   validateProjectInput,
 } from './validation'
 
@@ -123,4 +124,21 @@ describe('getPhotoFileError', () => {
       '"huge.pdf" isn\'t a supported image. Use JPEG, PNG, WebP, GIF or HEIC.',
     )
   })
+})
+
+describe('isValidUuid', () => {
+  test('accepts a UUID', () => {
+    expect(isValidUuid('6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b')).toBe(true)
+  })
+
+  test('accepts uppercase hex digits', () => {
+    expect(isValidUuid('6F1C2A3B-4D5E-4F60-8A7B-9C0D1E2F3A4B')).toBe(true)
+  })
+
+  test.each(['', '123', 'not-a-uuid', '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4', '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4bz'])(
+    'rejects %j',
+    (value) => {
+      expect(isValidUuid(value)).toBe(false)
+    },
+  )
 })

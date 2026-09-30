@@ -1,3 +1,4 @@
+import { UPLOAD_STATUS_LABELS } from '../hooks/useUploadPhotos'
 import type { UploadState } from '../hooks/useUploadPhotos'
 
 export type PickedPhoto = { key: string; file: File; previewUrl: string }
@@ -11,12 +12,6 @@ type PhotoPickerGridProps = {
   onReplace: (key: string) => void
   onRetry: (key: string) => void
 }
-
-const STATUS_LABELS = {
-  waiting: 'Waiting…',
-  uploading: 'Uploading…',
-  done: 'Uploaded',
-} as const
 
 const SMALL_BUTTON_CLASSES =
   'rounded border border-gray-300 bg-white px-2 py-1 text-xs hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
@@ -44,7 +39,7 @@ export function PhotoPickerGrid({
             )}
 
             {uploadState && uploadState.status !== 'failed' && (
-              <p className="text-xs text-gray-600">{STATUS_LABELS[uploadState.status]}</p>
+              <p className="text-xs text-gray-600">{UPLOAD_STATUS_LABELS[uploadState.status]}</p>
             )}
 
             <div className="flex flex-wrap gap-1">
