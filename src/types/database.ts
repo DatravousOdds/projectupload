@@ -18,7 +18,6 @@ export type Database = {
         Row: {
           caption: string | null
           created_at: string
-          deleted_at: string | null
           file_name: string
           height: number | null
           id: string
@@ -33,7 +32,6 @@ export type Database = {
         Insert: {
           caption?: string | null
           created_at?: string
-          deleted_at?: string | null
           file_name: string
           height?: number | null
           id?: string
@@ -48,7 +46,6 @@ export type Database = {
         Update: {
           caption?: string | null
           created_at?: string
-          deleted_at?: string | null
           file_name?: string
           height?: number | null
           id?: string
