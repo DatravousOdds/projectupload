@@ -64,7 +64,11 @@ Storage paths have no file extension, so a replacement always lands at the same 
 -- Keep projects.updated_at current when photos are added, replaced, or deleted
 create function touch_project() returns trigger as $$
 begin
-  update projects set updated_at = now() where id = coalesce(new.project_id, old.project_id);
+  if tg_op = 'DELETE' then
+    update projects set updated_at = now() where id = old.project_id;
+  else
+    update projects set updated_at = now() where id = new.project_id;
+  end if;
   return null;
 end;
 $$ language plpgsql security definer;

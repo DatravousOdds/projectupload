@@ -3,6 +3,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Photo } from '../api/photos'
 import type { ProjectWithPhotoCount } from '../api/projects'
+import { useDeletePhoto } from '../hooks/useDeletePhoto'
 import { usePhotos } from '../hooks/usePhotos'
 import { useProject } from '../hooks/useProject'
 import { useUploadPhotos } from '../hooks/useUploadPhotos'
@@ -12,6 +13,7 @@ import { ProjectDetailPage } from './ProjectDetailPage'
 // The page is tested against fake hooks; the real hooks and api have their own coverage.
 vi.mock('../hooks/useProject', () => ({ useProject: vi.fn() }))
 vi.mock('../hooks/usePhotos', () => ({ usePhotos: vi.fn() }))
+vi.mock('../hooks/useDeletePhoto', () => ({ useDeletePhoto: vi.fn() }))
 vi.mock('../hooks/useUploadPhotos', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../hooks/useUploadPhotos')>()),
   useUploadPhotos: vi.fn(),
@@ -22,6 +24,7 @@ vi.mock('../api/photos', () => ({
 
 type ProjectResult = ReturnType<typeof useProject>
 type PhotosResult = ReturnType<typeof usePhotos>
+type DeleteResult = ReturnType<typeof useDeletePhoto>
 
 const PROJECT_ID = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b'
 const UPLOAD_KEY = '00000000-0000-4000-8000-000000000001'
@@ -29,6 +32,7 @@ const UPLOAD_KEY = '00000000-0000-4000-8000-000000000001'
 const refetchProject = vi.fn()
 const refetchPhotos = vi.fn()
 const uploadPhotos = vi.fn()
+const deletePhoto = vi.fn()
 
 const gardenProject: ProjectWithPhotoCount = {
   id: PROJECT_ID,
@@ -53,7 +57,6 @@ function makePhoto(id: string, fileName: string): Photo {
     caption: null,
     created_at: '2026-09-29T12:00:00+00:00',
     updated_at: '2026-09-29T12:00:00+00:00',
-    deleted_at: null,
   }
 }
 
@@ -87,6 +90,10 @@ function mockUploads(state: { uploadStates?: Record<string, UploadState>; isUplo
   })
 }
 
+function mockDelete(state: Partial<DeleteResult> = {}) {
+  vi.mocked(useDeletePhoto).mockReturnValue({ mutate: deletePhoto, isError: false, ...state } as unknown as DeleteResult)
+}
+
 function pageAt(path: string) {
   return (
     <MemoryRouter initialEntries={[path]}>
@@ -110,6 +117,7 @@ beforeEach(() => {
   mockProject({ data: gardenProject })
   mockPhotos({ data: [] })
   mockUploads()
+  mockDelete()
   vi.spyOn(crypto, 'randomUUID').mockReturnValue(UPLOAD_KEY)
 })
 
@@ -282,5 +290,102 @@ describe('ProjectDetailPage: uploading', () => {
     renderPage()
 
     expect(screen.getByRole('button', { name: 'Upload photos' })).toBeDisabled()
+  })
+})
+
+describe('ProjectDetailPage: deleting', () => {
+  const DELETE_MESSAGE = "Delete this photo? This can't be undone."
+
+  // Named, because the viewer's own Delete button is also on screen.
+  function confirmDelete() {
+    const confirmDialog = screen.getByRole('dialog', { name: DELETE_MESSAGE })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
+  }
+
+  const newer = makePhoto('photo-2', 'newer.jpg')
+  const older = makePhoto('photo-1', 'older.jpg')
+
+  beforeEach(() => {
+    mockPhotos({ data: [newer, older] })
+  })
+
+  test('asks for confirmation before deleting from the grid', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete older.jpg' }))
+
+    expect(screen.getByRole('dialog', { name: DELETE_MESSAGE })).toBeInTheDocument()
+    expect(deletePhoto).not.toHaveBeenCalled()
+
+    confirmDelete()
+
+    expect(deletePhoto).toHaveBeenCalledWith(older)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('keeps the photo when the confirmation is cancelled', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete older.jpg' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(deletePhoto).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('moves the viewer to the next photo after deleting', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open newer.jpg' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    confirmDelete()
+
+    expect(deletePhoto).toHaveBeenCalledWith(newer)
+    expect(within(screen.getByRole('dialog')).getByRole('img', { name: 'older.jpg' })).toBeInTheDocument()
+  })
+
+  test('moves the viewer back to the previous photo when the last one is deleted', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open older.jpg' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    confirmDelete()
+
+    expect(within(screen.getByRole('dialog')).getByRole('img', { name: 'newer.jpg' })).toBeInTheDocument()
+  })
+
+  test('closes the viewer after deleting the only photo', () => {
+    mockPhotos({ data: [older] })
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open older.jpg' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    confirmDelete()
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  test('does not bring back a photo uploaded on this visit once it is deleted', () => {
+    const uploaded = makePhoto('photo-9', 'front.jpg')
+    mockPhotos({ data: [] })
+    const { rerender } = renderPage()
+
+    pickPhotos(new File(['x'], 'front.jpg', { type: 'image/jpeg' }))
+    mockUploads({ uploadStates: { [UPLOAD_KEY]: { status: 'done', errorMessage: null, photo: uploaded } } })
+    rerender(pageAt(`/projects/${PROJECT_ID}`))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete front.jpg' }))
+    confirmDelete()
+
+    expect(deletePhoto).toHaveBeenCalledWith(uploaded)
+    expect(screen.queryByRole('button', { name: 'Open front.jpg' })).not.toBeInTheDocument()
+  })
+
+  test('shows an error when a delete fails', () => {
+    mockDelete({ isError: true, variables: older } as Partial<DeleteResult>)
+
+    renderPage()
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Couldn\'t delete "older.jpg".')
   })
 })

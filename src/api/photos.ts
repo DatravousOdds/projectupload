@@ -65,18 +65,35 @@ export async function uploadPhoto(projectId: string, file: File): Promise<Photo>
   return data
 }
 
-// Soft-deleted photos are hidden here, never shown in the app. See SPEC.md → Supabase rules.
 export async function listPhotos(projectId: string): Promise<Photo[]> {
   const { data, error } = await supabase
     .from('photos')
     .select('*')
     .eq('project_id', projectId)
-    .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   if (error) throw error
 
   return data
+}
+
+// Permanent: the row goes first, so a failure can only leave unseen files, never a row with missing images.
+export async function deletePhoto(photoId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('photos')
+    .delete()
+    .eq('id', photoId)
+    .select('storage_path, thumb_path')
+    .single()
+
+  if (error) throw error
+
+  const paths = [data.storage_path, data.thumb_path]
+  const { data: removed, error: removeError } = await supabase.storage.from(PHOTOS_BUCKET).remove(paths)
+
+  // The photo is already gone for the user, so leftover files are logged for cleanup rather than thrown.
+  // Storage reports policy-blocked removals as fewer removed files, not as an error.
+  if (removeError || removed.length < paths.length) logOrphanedFiles(paths)
 }
 
 // The only place image URLs are built. updated_at changes on replace, so the new file isn't served from cache.

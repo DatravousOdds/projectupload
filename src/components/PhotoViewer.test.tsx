@@ -9,6 +9,7 @@ vi.mock('../api/photos', () => ({
 
 const onNavigate = vi.fn()
 const onClose = vi.fn()
+const onDelete = vi.fn()
 
 function makePhoto(id: string, fileName: string, overrides: Partial<Photo> = {}): Photo {
   return {
@@ -24,7 +25,6 @@ function makePhoto(id: string, fileName: string, overrides: Partial<Photo> = {})
     caption: null,
     created_at: '2026-09-29T12:00:00+00:00',
     updated_at: '2026-09-29T12:00:00+00:00',
-    deleted_at: null,
     ...overrides,
   }
 }
@@ -32,7 +32,15 @@ function makePhoto(id: string, fileName: string, overrides: Partial<Photo> = {})
 const photos = [makePhoto('photo-1', 'first.jpg'), makePhoto('photo-2', 'second.jpg'), makePhoto('photo-3', 'third.jpg')]
 
 function renderViewer(photoId: string, viewerPhotos = photos) {
-  render(<PhotoViewer photos={viewerPhotos} photoId={photoId} onNavigate={onNavigate} onClose={onClose} />)
+  render(
+    <PhotoViewer
+      photos={viewerPhotos}
+      photoId={photoId}
+      onNavigate={onNavigate}
+      onClose={onClose}
+      onDelete={onDelete}
+    />,
+  )
 }
 
 beforeEach(() => {
@@ -96,6 +104,14 @@ describe('PhotoViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
 
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  test('asks to delete the photo being shown', () => {
+    renderViewer('photo-2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    expect(onDelete).toHaveBeenCalledWith(photos[1])
   })
 
   test('shows a placeholder when the browser cannot display the photo', () => {

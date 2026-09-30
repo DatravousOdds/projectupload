@@ -58,7 +58,7 @@ describe('createProject', () => {
 
 describe('listProjects', () => {
   // A chainable fake: every query method returns the same object, and awaiting it gives `result`.
-  type FakeQuery = Record<'select' | 'is' | 'order' | 'limit', ReturnType<typeof vi.fn>> & {
+  type FakeQuery = Record<'select' | 'order' | 'limit', ReturnType<typeof vi.fn>> & {
     then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => Promise<unknown>
   }
 
@@ -76,7 +76,6 @@ describe('listProjects', () => {
     const chain = () => query
     query = {
       select: vi.fn(chain),
-      is: vi.fn(chain),
       order: vi.fn(chain),
       limit: vi.fn(chain),
       then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
@@ -101,13 +100,11 @@ describe('listProjects', () => {
     ])
   })
 
-  test('counts and covers only visible photos, newest-updated project first', async () => {
+  test('counts photos and sorts newest-updated project first', async () => {
     await listProjects()
 
     expect(supabase.from).toHaveBeenCalledWith('projects')
     expect(query.select).toHaveBeenCalledWith('*, photos(count), cover:photos(storage_path, thumb_path, updated_at)')
-    expect(query.is).toHaveBeenCalledWith('photos.deleted_at', null)
-    expect(query.is).toHaveBeenCalledWith('cover.deleted_at', null)
     expect(query.order).toHaveBeenCalledWith('updated_at', { ascending: false })
   })
 
@@ -131,17 +128,16 @@ describe('listProjects', () => {
 })
 
 describe('getProject', () => {
-  // Fake the chain: from('projects').select(...).is(...).eq(...).maybeSingle()
+  // Fake the chain: from('projects').select(...).eq(...).maybeSingle()
   const maybeSingle = vi.fn()
   const eq = vi.fn(() => ({ maybeSingle }))
-  const is = vi.fn(() => ({ eq }))
-  const select = vi.fn(() => ({ is }))
+  const select = vi.fn(() => ({ eq }))
 
   beforeEach(() => {
     vi.mocked(supabase.from).mockReturnValue({ select } as unknown as FromResult)
   })
 
-  test('returns the project with its visible photo count', async () => {
+  test('returns the project with its photo count', async () => {
     maybeSingle.mockResolvedValue({ data: { ...projectRow, photos: [{ count: 2 }] }, error: null })
 
     const project = await getProject(projectRow.id)
@@ -149,7 +145,6 @@ describe('getProject', () => {
     expect(project).toEqual({ ...projectRow, photoCount: 2 })
     expect(supabase.from).toHaveBeenCalledWith('projects')
     expect(select).toHaveBeenCalledWith('*, photos(count)')
-    expect(is).toHaveBeenCalledWith('photos.deleted_at', null)
     expect(eq).toHaveBeenCalledWith('id', projectRow.id)
   })
 

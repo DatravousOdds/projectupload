@@ -2,12 +2,14 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import type { Photo } from '../api/photos'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { PhotoGrid } from '../components/PhotoGrid'
 import { PhotoViewer } from '../components/PhotoViewer'
 import { UploadButton } from '../components/UploadButton'
 import { usePhotos } from '../hooks/usePhotos'
+import { useDeletePhoto } from '../hooks/useDeletePhoto'
 import { useProject } from '../hooks/useProject'
 import { useUploadPhotos } from '../hooks/useUploadPhotos'
 import type { PhotoUpload } from '../hooks/useUploadPhotos'
@@ -22,11 +24,13 @@ export function ProjectDetailPage() {
   const projectQuery = useProject(id)
   const photosQuery = usePhotos(id)
   const { uploadStates, uploadPhotos, isUploading } = useUploadPhotos()
+  const deletePhotoMutation = useDeletePhoto()
 
   // This visit's uploads, newest first.
   const [uploads, setUploads] = useState<PhotoUpload[]>([])
   const [pickErrors, setPickErrors] = useState<string[]>([])
   const [openPhotoId, setOpenPhotoId] = useState<string | null>(null)
+  const [photoToDelete, setPhotoToDelete] = useState<Photo | null>(null)
 
   // Checked before isPending: an invalid id never starts a query, so it would stay pending forever.
   if (!id || !isValidUuid(id)) return <NotFoundPage title="Project not found" />
@@ -67,6 +71,22 @@ export function ProjectDetailPage() {
 
   function handleRetry(upload: PhotoUpload) {
     if (project) uploadPhotos(project.id, [upload])
+  }
+
+  function handleConfirmDelete(photo: Photo) {
+    setPhotoToDelete(null)
+
+    // The viewer moves on to the next photo (or the previous one at the end), and closes if none are left.
+    if (openPhotoId === photo.id) {
+      const index = visiblePhotos.findIndex(({ id }) => id === photo.id)
+      const neighbor = visiblePhotos[index + 1] ?? visiblePhotos[index - 1]
+      setOpenPhotoId(neighbor?.id ?? null)
+    }
+
+    // Otherwise a photo uploaded on this visit would come back from its upload state.
+    setUploads((previous) => previous.filter(({ key }) => uploadStates[key]?.photo?.id !== photo.id))
+
+    deletePhotoMutation.mutate(photo)
   }
 
   if (projectQuery.isPending) {
@@ -130,6 +150,7 @@ export function ProjectDetailPage() {
         canRetry={!isUploading}
         onOpen={setOpenPhotoId}
         onRetry={handleRetry}
+        onDelete={setPhotoToDelete}
       />
     )
   }
@@ -153,6 +174,12 @@ export function ProjectDetailPage() {
         <UploadButton onPick={handlePick} disabled={isUploading} />
       </header>
 
+      {deletePhotoMutation.isError && (
+        <p role="alert" className="mt-4 text-sm text-red-700">
+          Couldn't delete "{deletePhotoMutation.variables.file_name}". Check your connection and try again.
+        </p>
+      )}
+
       {pickErrors.length > 0 && (
         <ul role="alert" className="mt-4 space-y-1 text-sm text-red-700">
           {pickErrors.map((pickError) => (
@@ -174,6 +201,16 @@ export function ProjectDetailPage() {
           photoId={openPhotoId}
           onNavigate={setOpenPhotoId}
           onClose={() => setOpenPhotoId(null)}
+          onDelete={setPhotoToDelete}
+        />
+      )}
+
+      {photoToDelete && (
+        <ConfirmDialog
+          message="Delete this photo? This can't be undone."
+          confirmLabel="Delete"
+          onConfirm={() => handleConfirmDelete(photoToDelete)}
+          onCancel={() => setPhotoToDelete(null)}
         />
       )}
     </main>

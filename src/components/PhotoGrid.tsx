@@ -3,6 +3,7 @@ import { getPhotoUrl } from '../api/photos'
 import type { Photo } from '../api/photos'
 import { UPLOAD_STATUS_LABELS } from '../hooks/useUploadPhotos'
 import type { PhotoUpload, UploadState } from '../hooks/useUploadPhotos'
+import { PhotoActionsMenu } from './PhotoActionsMenu'
 
 type PhotoGridProps = {
   photos: Photo[]
@@ -11,13 +12,14 @@ type PhotoGridProps = {
   canRetry: boolean
   onOpen: (photoId: string) => void
   onRetry: (upload: PhotoUpload) => void
+  onDelete: (photo: Photo) => void
 }
 
 const TILE_CLASSES = 'aspect-square w-full rounded bg-gray-200'
 
 const FOCUS_CLASSES = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
 
-export function PhotoGrid({ photos, pendingUploads, uploadStates, canRetry, onOpen, onRetry }: PhotoGridProps) {
+export function PhotoGrid({ photos, pendingUploads, uploadStates, canRetry, onOpen, onRetry, onDelete }: PhotoGridProps) {
   // Photos the browser can't display (e.g. HEIC outside Safari) show a placeholder instead of a broken image.
   const [unavailableIds, setUnavailableIds] = useState<Set<string>>(() => new Set())
 
@@ -59,7 +61,7 @@ export function PhotoGrid({ photos, pendingUploads, uploadStates, canRetry, onOp
       })}
 
       {photos.map((photo) => (
-        <li key={photo.id}>
+        <li key={photo.id} className="group relative">
           <button
             type="button"
             onClick={() => onOpen(photo.id)}
@@ -80,6 +82,7 @@ export function PhotoGrid({ photos, pendingUploads, uploadStates, canRetry, onOp
               />
             )}
           </button>
+          <PhotoActionsMenu fileName={photo.file_name} onDelete={() => onDelete(photo)} />
         </li>
       ))}
     </ul>

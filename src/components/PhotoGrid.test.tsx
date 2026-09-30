@@ -10,6 +10,7 @@ vi.mock('../api/photos', () => ({
 
 const onOpen = vi.fn()
 const onRetry = vi.fn()
+const onDelete = vi.fn()
 
 function makePhoto(id: string, fileName: string): Photo {
   return {
@@ -25,7 +26,6 @@ function makePhoto(id: string, fileName: string): Photo {
     caption: null,
     created_at: '2026-09-29T12:00:00+00:00',
     updated_at: '2026-09-29T12:00:00+00:00',
-    deleted_at: null,
   }
 }
 
@@ -41,6 +41,7 @@ function renderGrid(props: Partial<Parameters<typeof PhotoGrid>[0]> = {}) {
       canRetry
       onOpen={onOpen}
       onRetry={onRetry}
+      onDelete={onDelete}
       {...props}
     />,
   )
@@ -68,6 +69,15 @@ describe('PhotoGrid', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open kitchen.jpg' }))
 
     expect(onOpen).toHaveBeenCalledWith('photo-2')
+  })
+
+  test('asks to delete a photo from its actions menu', () => {
+    renderGrid()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete kitchen.jpg' }))
+
+    expect(onDelete).toHaveBeenCalledWith(kitchen)
+    expect(onOpen).not.toHaveBeenCalled()
   })
 
   test('shows a placeholder when the browser cannot display a thumbnail', () => {

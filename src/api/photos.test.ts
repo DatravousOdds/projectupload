@@ -3,7 +3,7 @@ import { processPhoto } from '../lib/images'
 import type { ProcessedPhoto } from '../lib/images'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
-import { getPhotoUrl, listPhotos, uploadPhoto } from './photos'
+import { deletePhoto, getPhotoUrl, listPhotos, uploadPhoto } from './photos'
 
 // Swap the real client for a fake so tests never reach Supabase.
 vi.mock('../lib/supabase', () => ({ supabase: { from: vi.fn(), storage: { from: vi.fn() } } }))
@@ -32,7 +32,6 @@ const photoRow: Tables<'photos'> = {
   caption: null,
   created_at: '2026-09-29T12:00:00+00:00',
   updated_at: '2026-09-29T12:00:00+00:00',
-  deleted_at: null,
 }
 
 describe('uploadPhoto', () => {
@@ -167,10 +166,9 @@ describe('getPhotoUrl', () => {
 })
 
 describe('listPhotos', () => {
-  // Fake the chain: from('photos').select('*').eq(...).is(...).order(...)
+  // Fake the chain: from('photos').select('*').eq(...).order(...)
   const order = vi.fn()
-  const is = vi.fn(() => ({ order }))
-  const eq = vi.fn(() => ({ is }))
+  const eq = vi.fn(() => ({ order }))
   const select = vi.fn(() => ({ eq }))
 
   beforeEach(() => {
@@ -178,7 +176,7 @@ describe('listPhotos', () => {
     vi.mocked(supabase.from).mockReturnValue({ select } as unknown as FromResult)
   })
 
-  test("returns the project's visible photos, newest first", async () => {
+  test("returns the project's photos, newest first", async () => {
     order.mockResolvedValue({ data: [photoRow], error: null })
 
     const photos = await listPhotos(PROJECT_ID)
@@ -187,7 +185,6 @@ describe('listPhotos', () => {
     expect(supabase.from).toHaveBeenCalledWith('photos')
     expect(select).toHaveBeenCalledWith('*')
     expect(eq).toHaveBeenCalledWith('project_id', PROJECT_ID)
-    expect(is).toHaveBeenCalledWith('deleted_at', null)
     expect(order).toHaveBeenCalledWith('created_at', { ascending: false })
   })
 
@@ -196,5 +193,64 @@ describe('listPhotos', () => {
     order.mockResolvedValue({ data: null, error: supabaseError })
 
     await expect(listPhotos(PROJECT_ID)).rejects.toBe(supabaseError)
+  })
+})
+
+describe('deletePhoto', () => {
+  // Fake the row delete: from('photos').delete().eq(...).select(...).single()
+  const single = vi.fn()
+  const select = vi.fn(() => ({ single }))
+  const eq = vi.fn(() => ({ select }))
+  const deleteRow = vi.fn(() => ({ eq }))
+
+  // Fake the Storage call: storage.from('photos').remove([...])
+  const remove = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(supabase.from).mockReturnValue({ delete: deleteRow } as unknown as FromResult)
+    vi.mocked(supabase.storage.from).mockReturnValue({ remove } as unknown as StorageBucket)
+    single.mockResolvedValue({ data: { storage_path: STORAGE_PATH, thumb_path: THUMB_PATH }, error: null })
+    remove.mockResolvedValue({ data: [{ name: STORAGE_PATH }, { name: THUMB_PATH }], error: null })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  test('deletes the row, then removes both of its files', async () => {
+    await deletePhoto(PHOTO_ID)
+
+    expect(supabase.from).toHaveBeenCalledWith('photos')
+    expect(eq).toHaveBeenCalledWith('id', PHOTO_ID)
+    expect(select).toHaveBeenCalledWith('storage_path, thumb_path')
+    expect(supabase.storage.from).toHaveBeenCalledWith('photos')
+    expect(remove).toHaveBeenCalledWith([STORAGE_PATH, THUMB_PATH])
+    expect(single.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0])
+  })
+
+  test('throws without touching Storage when the row delete fails', async () => {
+    const databaseError = new Error('JSON object requested, multiple (or no) rows returned')
+    single.mockResolvedValue({ data: null, error: databaseError })
+
+    await expect(deletePhoto(PHOTO_ID)).rejects.toBe(databaseError)
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  test('logs the orphaned files but still resolves when removing them fails', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    remove.mockResolvedValue({ data: null, error: new Error('network down') })
+
+    await expect(deletePhoto(PHOTO_ID)).resolves.toBeUndefined()
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Orphaned'), [STORAGE_PATH, THUMB_PATH])
+  })
+
+  test('logs the orphaned files when Storage silently removes fewer than both', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    remove.mockResolvedValue({ data: [], error: null })
+
+    await deletePhoto(PHOTO_ID)
+
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Orphaned'), [STORAGE_PATH, THUMB_PATH])
   })
 })

@@ -9,12 +9,13 @@ type PhotoViewerProps = {
   photoId: string
   onNavigate: (photoId: string) => void
   onClose: () => void
+  onDelete: (photo: Photo) => void
 }
 
 const BUTTON_CLASSES =
   'rounded border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600'
 
-export function PhotoViewer({ photos, photoId, onNavigate, onClose }: PhotoViewerProps) {
+export function PhotoViewer({ photos, photoId, onNavigate, onClose, onDelete }: PhotoViewerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [unavailableIds, setUnavailableIds] = useState<Set<string>>(() => new Set())
 
@@ -87,7 +88,10 @@ export function PhotoViewer({ photos, photoId, onNavigate, onClose }: PhotoViewe
           )}
         </dl>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => onDelete(photo)} className={`${BUTTON_CLASSES} text-red-700`}>
+            Delete
+          </button>
           <button
             type="button"
             onClick={() => previousPhoto && onNavigate(previousPhoto.id)}
