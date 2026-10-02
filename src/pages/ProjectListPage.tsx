@@ -1,25 +1,16 @@
 import type { ReactNode } from 'react';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
+import { AppHeader } from '../components/AppHeader';
 import { COVER_CLASSES, ProjectCard } from '../components/ProjectCard';
-import { ProjectFormModal } from '../components/ProjectFormModal';
 import { useProjects } from '../hooks/useProjects';
-import { useState } from 'react';
-
 
 // Shared by the loading placeholders and the real list so nothing shifts when data arrives.
 const PROJECT_LIST_CLASSES = 'flex flex-col gap-3';
 const PLACEHOLDER_CARD_COUNT = 6;
 
-
-
 export function ProjectListPage() {
-  const [isFormOpen, setFormOpen] = useState(false);
   const { data: projects, isPending, isError, error, refetch } = useProjects();
-
-  function handleClick() {
-    setFormOpen(true);
-  }
 
   let content: ReactNode
 
@@ -63,24 +54,13 @@ export function ProjectListPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
-      <header className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Projects</h1>
-        <button
-          onClick={handleClick}
-          type="button"
-          className="rounded bg-gray-900 px-4 py-2 text-white hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-        >
-          New project
-        </button>
-      </header>
+      <AppHeader />
 
       <main className="mt-6">{content}</main>
 
       <footer className="mt-10 text-sm text-gray-600">
         <p>Projects and photos here are public.</p>
       </footer>
-
-      {isFormOpen && <ProjectFormModal onClose={() => setFormOpen(false)} />}
     </div>
   )
 }
